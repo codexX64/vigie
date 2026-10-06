@@ -1,0 +1,12 @@
+VIGIE — ce qui est gardé
+
+Comptes : identifiant, empreinte du mot de passe (Argon2id), facteurs (TOTP scellé, clés d'accès), sessions et journal de sécurité, comme tous les services du socle.
+Audits : pour chacun, le score, les constats (appareil concerné, preuve relevée — ports, versions, vulnérabilités —, correction proposée) et la relecture de l'IA. Les 200 derniers sont gardés.
+Veille : les événements (5 000 au plus) et un instantané du réseau (adresses, ports ouverts, VLAN) pour comparer une passe à la suivante.
+Actions : qui a isolé, rendu ou balayé quel appareil, quand, et l'état d'avant.
+Réglages : clé d'IA en nuage, jeton docker-control, clé de billetterie et jeton Telegram, scellés par la clé maîtresse.
+
+Ce qui part ailleurs :
+- Le fournisseur d'IA en nuage choisi (Anthropic, OpenAI ou Moonshot), seulement en mode « cloud », « les-deux » ou « secours » : les constats de l'audit (noms d'appareils, adresses, ports, versions) pour relecture. En mode « locale », rien ne sort du réseau.
+- SYNAPSE (mémoire de la suite), s'il est relié : le résumé de chaque audit et de chaque intervention.
+- La billetterie et Telegram, s'ils sont configurés : les alertes au-delà du seuil choisi.
