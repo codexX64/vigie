@@ -244,8 +244,8 @@ export function rapportPdf({ audit, constats, historique = [], precedent = null 
   // Priorités et synthèse
   const ia = audit.ia || {};
   const graves = constats.filter(c => c.gravite !== 'safe');
-  const prio = ia.priorites?.length ? ia.priorites.map(p => ({ titre: p.titre, texte: p.pourquoi }))
-    : (audit.priorites || []).map(p => ({ titre: p.titre, texte: `${p.sujet ? p.sujet + ' — ' : ''}${p.correction}` }));
+  // Les priorités du moteur ; les pistes de l'IA viennent à part, avec sa synthèse.
+  const prio = (audit.priorites || []).map(p => ({ titre: p.titre, texte: `${p.sujet ? p.sujet + ' — ' : ''}${p.correction}` }));
   titreSection(doc, 'Priorités du moment');
   if (!prio.length) doc.paragraphe('Aucun écart à corriger en priorité.');
   prio.forEach((p, i) => {
@@ -258,6 +258,11 @@ export function rapportPdf({ audit, constats, historique = [], precedent = null 
   if (ia.synthese) {
     titreSection(doc, `Synthèse rédigée par l’IA (${ia.moteur === 'locale' ? 'locale' : ia.moteur === 'cloud' ? 'en nuage' : 'locale et en nuage'})`);
     doc.paragraphe(ia.synthese);
+    for (const p of ia.priorites || []) {
+      doc.place(24);
+      doc.paragraphe(`Piste : ${p.titre}`, { taille: 9, gras: true, couleur: DOUX });
+      if (p.pourquoi) doc.paragraphe(p.pourquoi, { taille: 9 });
+    }
     for (const sc of ia.scenarios || []) {
       doc.y += 4;
       doc.paragraphe(`Scénario : ${sc.titre}`, { gras: true, couleur: ENCRE });

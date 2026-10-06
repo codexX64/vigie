@@ -63,7 +63,7 @@ export class Memoire {
         `Audit ${a.declencheur} terminé, score global ${a.score ?? 'non évalué'}.`,
         ...Object.entries(a.domaines).filter(([, d]) => d.score !== null).map(([k, d]) => `${k} : ${d.score}/100`),
         priorites.length ? `Priorités : ${priorites.map(p => `${p.titre} (${p.sujet || 'global'})`).join(' ; ')}.` : 'Aucune priorité.',
-        a.ia?.synthese ? `Synthèse IA : ${a.ia.synthese.slice(0, 1500)}` : '',
+        // La synthèse de l'IA ne retourne pas en mémoire : elle reviendrait au prochain audit comme contexte.
       ].filter(Boolean).join('\n'),
       tags: ['audit'], meta: { score: a.score, distribution: a.distribution },
     });
