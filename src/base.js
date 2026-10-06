@@ -129,6 +129,16 @@ export class Magasin {
     this.db.prepare('DELETE FROM audits WHERE id NOT IN (SELECT id FROM audits ORDER BY debut DESC, rowid DESC LIMIT ?)').run(MAX_AUDITS);
   }
   poserIA(id, ia) { this.db.prepare('UPDATE audits SET ia = ? WHERE id = ?').run(JSON.stringify(ia), id); }
+  /** Au démarrage : un audit ou une relecture qu'un arrêt a coupés ne restent pas « en cours » pour toujours. */
+  reprendreInterrompus(maintenant = Date.now()) {
+    const n = this.db.prepare("UPDATE audits SET statut = 'echec', fin = ?, erreur = 'interrompu par un redémarrage de VIGIE' WHERE statut = 'en cours'").run(maintenant).changes;
+    let ia = 0;
+    for (const a of this.db.prepare("SELECT id, ia FROM audits WHERE ia LIKE '%\"en cours\"%'").all()) {
+      const v = json(a.ia, {});
+      if (v.statut === 'en cours') { this.poserIA(a.id, { statut: 'ignoree', raison: 'relecture interrompue par un redémarrage' }); ia++; }
+    }
+    return { audits: n, relectures: ia };
+  }
   verdictIA(constatId, statut, note) { this.db.prepare('UPDATE constats SET ia_statut = ?, ia_note = ? WHERE id = ?').run(statut, note, constatId); }
 
   ligneAudit(a) {
