@@ -1,0 +1,13 @@
+{
+  "name": "vigie",
+  "version": "1.0.0",
+  "description": "Audit et supervision défensive du réseau : moteur de règles sans IA, relecture par l'IA de son choix, veille continue, rapport PDF — sous le Hub, sur le socle commun.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": { "node": ">=24.7" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/main.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  }
+}
