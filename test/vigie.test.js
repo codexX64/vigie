@@ -337,13 +337,39 @@ test('remédiation à la main : périmètre, vérification et retour arrière, c
   let r = await admin.post('/api/actions', { type: 'quarantine', appareil: 'dehors' });
   assert.equal(r.status, 403, 'hors des plages déclarées');
   assert.match(r.json.error, /périmètre/);
-  // MapMyLAN répond « ok » mais l'appareil ne change pas : VIGIE défait.
+  // MapMyLAN répond « ok » mais l'appareil ne change pas : c'est dit, et rien n'est défait (il n'y a rien à défaire).
   faux.etat.actionPrend = false;
-  const avant = faux.etat.actions.length;
+  let avant = faux.etat.actions.length;
   r = await admin.post('/api/actions', { type: 'quarantine', appareil: 'camera', motif: 'essai' });
   assert.equal(r.json.etat, 'restauree');
-  assert.deepEqual(faux.etat.actions.slice(avant).map(a => a.type), ['quarantine', 'unban']);
+  assert.match(r.json.resultat, /rien à défaire/);
+  assert.deepEqual(faux.etat.actions.slice(avant).map(a => a.type), ['quarantine'], 'pas d’unban qui effacerait un statut « suspect »');
   faux.etat.actionPrend = true;
+  // MapMyLAN muet après l'action : « à vérifier », jamais défait (un appareil peut-être compromis reste isolé).
+  faux.etat.muetApresAction = true;
+  avant = faux.etat.actions.length;
+  r = await admin.post('/api/actions', { type: 'quarantine', appareil: 'camera', motif: 'essai' });
+  faux.etat.muetApresAction = false; delete faux.etat.muet;
+  assert.equal(r.json.etat, 'averifier');
+  assert.deepEqual(faux.etat.actions.slice(avant).map(a => a.type), ['quarantine']);
+  assert.equal((await admin.post(`/api/actions/${r.json.id}/annuler`, {})).status, 200, 'une action à vérifier se défait à la main');
+  // L'infrastructure : jamais par le Hub (ni son IA), seulement une session d'administrateur qui force.
+  r = await hub('POST', '/api/actions', { type: 'quarantine', appareil: 'routeur' });
+  assert.equal(r.status, 403, 'la passerelle par le jeton du Hub : refusée');
+  assert.match(r.json.error, /infrastructure/);
+  assert.equal((await hub('POST', '/api/actions', { type: 'ban', appareil: 'nas', forcer: true })).status, 403, 'un jeton ne force jamais');
+  assert.equal((await admin.post('/api/actions', { type: 'quarantine', appareil: 'routeur' })).status, 403, 'même un administrateur doit forcer');
+  assert.equal(faux.etat.appareils.find(a => a.id === 'routeur').status, 'online');
+  r = await admin.post('/api/actions', { type: 'quarantine', appareil: 'nas', forcer: true });
+  assert.equal(r.json.etat, 'appliquee', 'forcé, sous renfort');
+  assert.equal((await admin.post(`/api/actions/${r.json.id}/annuler`, {})).status, 200);
+  // Les plages de MapMyLAN illisibles ou vides : aucune action (le repli sur les plages privées ne vaut que pour regarder).
+  const plages = faux.etat.plages;
+  faux.etat.plages = [];
+  r = await admin.post('/api/actions', { type: 'quarantine', appareil: 'dehors' });
+  assert.equal(r.status, 409);
+  assert.match(r.json.error, /périmètre déclaré/);
+  faux.etat.plages = plages;
   // Appliquer l'action proposée par un constat.
   const dernier = (await admin.get('/api/etat')).json.audit;
   const { constats } = (await admin.get(`/api/audits/${dernier.id}`)).json;
@@ -360,6 +386,9 @@ test('remédiation à la main : périmètre, vérification et retour arrière, c
 test('billetterie et essais de diffusion', async () => {
   let r = await admin.put('/api/reglages/billetterie', { url: 'http://exemple.org/ticket', cle: CLE_TICKET });
   assert.equal(r.status, 400, 'https exigé hors du réseau local');
+  for (const url of ['http://10.evil.example/t', 'http://127.0.0.1@evil.example/t', 'http://localhost.evil.example/t', 'https://moi:secret@exemple.org/t']) {
+    assert.equal((await admin.put('/api/reglages/billetterie', { url, cle: CLE_TICKET })).status, 400, `${url} : lu comme une adresse, pas comme un préfixe`);
+  }
   r = await admin.put('/api/reglages/billetterie', { url: `${ext}/ticket`, cle: CLE_TICKET, marqueur: 'aselia', seuil: 'faible' });
   assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.equal(r.json.billetterie.cle, true);
@@ -393,4 +422,14 @@ test('le choix d’IA fait dans le Hub s’applique au démarrage quand il chang
   v = await demarrer({ ...env, VIGIE_IA_MODE: 'secours', VIGIE_IA_MODELE: 'claude-essai' }, { log: silence });
   assert.equal(v.magasin.reglage('ia').mode, 'secours');
   await v.arreter();
+});
+
+test('redémarrage : un audit ou une relecture coupés ne restent pas « en cours »', async () => {
+  const db = vigie.magasin.db;
+  db.prepare("INSERT INTO audits(id, debut, statut, declencheur, auteur) VALUES('coupe1', ?, 'en cours', 'essai', 'x')").run(Date.now());
+  db.prepare("INSERT INTO audits(id, debut, fin, statut, declencheur, auteur, ia) VALUES('coupe2', ?, ?, 'termine', 'essai', 'x', ?)").run(Date.now(), Date.now(), JSON.stringify({ statut: 'en cours', mode: 'locale' }));
+  assert.deepEqual(vigie.magasin.reprendreInterrompus(), { audits: 1, relectures: 1 });
+  assert.equal(vigie.magasin.audit('coupe1').statut, 'echec');
+  assert.equal(vigie.magasin.audit('coupe2').ia.statut, 'ignoree');
+  assert.deepEqual(vigie.magasin.reprendreInterrompus(), { audits: 0, relectures: 0 });
 });

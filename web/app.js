@@ -35,7 +35,7 @@ const GRAVITES = ['critique', 'eleve', 'faible', 'info', 'safe'];
 const LIB = { safe: 'Conforme', info: 'Info', faible: 'Faible', eleve: 'Élevé', critique: 'Critique' };
 const ICONE_G = { safe: 'verifie', info: 'oeil', faible: 'alerte', eleve: 'alerte', critique: 'eclair' };
 const ACTION_LIB = { quarantine: 'Mise en quarantaine', ban: 'Bannissement', unban: 'Retour au réseau', 'deep-scan': 'Balayage approfondi', scan: 'Balayage du réseau' };
-const ETAT_ACTION = { appliquee: 'appliquée', restauree: 'défaite (n’a pas pris)', echec: 'échec', annulee: 'annulée' };
+const ETAT_ACTION = { appliquee: 'appliquée', restauree: 'n’a pas pris', echec: 'échec', annulee: 'annulée', averifier: 'à vérifier' };
 const SOURCES = { mapmylan: 'MapMyLAN', nexarc: 'NEXARC', docker: 'docker-control', tls: 'Sondes TLS', synapse: 'SYNAPSE' };
 const MODES_IA = { aucune: 'Aucune — le moteur de règles seul', locale: 'Locale — rien ne sort du réseau', cloud: 'En nuage — meilleure rédaction', 'les-deux': 'Les deux — la locale relit, le nuage tranche', secours: 'Secours — locale, nuage si elle échoue' };
 const sur = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
@@ -200,7 +200,9 @@ async function pageTableau() {
   const histo = e.historique;
   const prec = histo.length >= 2 ? histo.at(-2).score : null;
   const delta = prec !== null && a.score !== null ? a.score - prec : null;
-  const prio = (a.ia?.priorites?.length ? a.ia.priorites.map(p => ({ titre: p.titre, texte: p.pourquoi })) : e.priorites.map(p => ({ titre: p.titre, texte: `${p.sujet ? p.sujet + ' — ' : ''}${p.correction}`, gravite: p.gravite })));
+  // Les priorités sont celles du moteur (règles et gravités) ; l'IA propose des pistes à côté, jamais à leur place.
+  const prio = e.priorites.map(p => ({ titre: p.titre, texte: `${p.sujet ? p.sujet + ' — ' : ''}${p.correction}`, gravite: p.gravite }));
+  const pistes = (a.ia?.priorites || []).map(p => ({ titre: p.titre, texte: p.pourquoi }));
   return h('div', { class: 'page' }, entete,
     e.evenements.critiques ? h('div', { class: 'card mb18' }, h('div', { class: 'notice' }, h('span', { class: 'itile g-critique' }, icone('eclair', 15)),
       h('div', {}, h('p', { text: `${pluriel(e.evenements.critiques, 'événement critique', 'événements critiques')} non acquitté${e.evenements.critiques > 1 ? 's' : ''} cette semaine.` })),
@@ -212,7 +214,9 @@ async function pageTableau() {
         ...distribution(a.distribution),
         h('header', {}, h('h2', { text: 'Priorités du moment' })),
         prio.length ? prio.map((p, i) => h('div', { class: 'priorite' }, h('span', { class: 'rang', text: i + 1 }), h('div', {}, h('strong', { text: p.titre }), p.texte ? h('small', { text: p.texte }) : null)))
-          : h('p', { class: 'vide', text: 'Rien à corriger en priorité.' }))),
+          : h('p', { class: 'vide', text: 'Rien à corriger en priorité.' }),
+        pistes.length ? h('header', {}, h('h2', { text: 'Pistes de l’IA' }), h('span', { class: 'note', text: 'à vérifier' })) : null,
+        ...pistes.map(p => h('div', { class: 'priorite' }, h('span', { class: 'rang', text: '·' }), h('div', {}, h('strong', { text: p.titre }), p.texte ? h('small', { text: p.texte }) : null))))),
     carteIA(a.ia, e.ia),
     h('div', { class: 'split mt12' },
       h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Évolution du score' })), courbe(histo)),
@@ -358,7 +362,7 @@ async function pageActions() {
       h('div', { class: 'grow1' }, h('strong', { text: `${ACTION_LIB[x.type]} · ${x.cibleNom || x.cible}` }),
         h('small', { text: [x.automatique ? 'réaction rapide' : `par ${x.auteur}`, quand(x.quand), x.resultat, x.motif, x.annuleePar ? `annulée par ${x.annuleePar}` : ''].filter(Boolean).join(' · ') })),
       h('div', { class: 'fin' }, h('span', { class: `tag ${x.etat === 'appliquee' ? '' : x.etat === 'echec' ? 'held' : 'idle'}` }, h('i', { class: 'd' }), ETAT_ACTION[x.etat]),
-        admin && x.etat === 'appliquee' && ['quarantine', 'ban'].includes(x.type) ? h('button', { class: 'btn sm', type: 'button', onclick: sur(async () => {
+        admin && ['appliquee', 'averifier'].includes(x.etat) && ['quarantine', 'ban'].includes(x.type) ? h('button', { class: 'btn sm', type: 'button', onclick: sur(async () => {
           if (!(await confirmer(`Rendre ${x.cibleNom || x.cible} au réseau ?`, `Il retrouve l’état noté avant l’action (${x.avant.status || 'inconnu'}).`, { oui: 'Rendre au réseau' }))) return;
           await api.post(`/api/actions/${x.id}/annuler`, {}); toast('Appareil rendu au réseau.'); await peindre();
         }) }, 'Annuler') : null)))

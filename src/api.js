@@ -14,6 +14,8 @@ import { MODES_IA, FOURNISSEURS } from './ia.js';
 import { priorites, REGLES, DOMAINES } from './regles.js';
 import { rapportPdf } from './pdf.js';
 import { ErreurAction } from './veille.js';
+import { PRIVEES, plages } from './sources.js';
+import net from 'node:net';
 import { VERSION } from './config.js';
 
 const T = (max, o = {}) => ({ type: 'chaine', max, ...o });
@@ -25,7 +27,7 @@ const MODELE = /^[\w.:/-]{1,120}$/;
 
 const S = {
   audit: { ia: B },
-  action: { type: T(12, { requis: true, parmi: ['quarantine', 'ban', 'unban', 'deep-scan', 'scan'] }), appareil: T(64, { motif: ID_APPAREIL }), motif: T(200) },
+  action: { type: T(12, { requis: true, parmi: ['quarantine', 'ban', 'unban', 'deep-scan', 'scan'] }), appareil: T(64, { motif: ID_APPAREIL }), motif: T(200), forcer: B },
   vide: {},
   ia: {
     mode: T(12, { parmi: MODES_IA }), fournisseur: T(12, { parmi: Object.keys(FOURNISSEURS) }), modeleCloud: T(120, { motif: /^([\w.:/-]{1,120})?$/ }),
@@ -54,6 +56,23 @@ export function nomDerive(secret, brut) {
   const attendu = crypto.createHmac('sha256', String(secret)).update('cerveau:' + m[1]).digest();
   const recu = Buffer.from(m[2], 'hex');
   return recu.length === attendu.length && crypto.timingSafeEqual(recu, attendu) ? m[1] : null;
+}
+
+/**
+ * L'adresse de la billetterie, lue comme une URL (pas comme un préfixe) :
+ * https partout, http seulement vers une adresse privée, la machine elle-même
+ * ou un conteneur du Hub ; jamais d'identifiants dans l'adresse.
+ */
+const LOCALES = plages([...PRIVEES, '127.0.0.0/8']);
+export function urlBilletterieSure(brute) {
+  let u;
+  try { u = new URL(brute); } catch { return false; }
+  if (u.username || u.password) return false;
+  if (u.protocol === 'https:') return true;
+  if (u.protocol !== 'http:') return false;
+  const hote = u.hostname;
+  if (hote === 'localhost' || /^hub-[a-z0-9-]{1,60}$/.test(hote)) return true;
+  return net.isIPv4(hote) && LOCALES.check(hote, 'ipv4');
 }
 
 export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, diffusion }) {
@@ -180,7 +199,12 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     // Balayer et regarder de près : membre. Couper un appareil du réseau : admin.
     if (!['deep-scan', 'scan'].includes(b.type) && qui.type === 'session' && qui.role !== 'admin') throw new ErreurHttp(403, 'Droits insuffisants : isoler un appareil est réservé aux administrateurs.');
     if (b.type !== 'scan' && !b.appareil) throw new ErreurHttp(400, 'Champ « appareil » : obligatoire.');
-    const x = await moteur.executer({ type: b.type, appareil: b.appareil, motif: b.motif || '', auteur: qui.nom }).catch(actionErreur);
+    // Forcer l'isolation d'un équipement d'infrastructure : une session d'administrateur, sous renfort ; jamais un jeton.
+    if (b.forcer) {
+      if (qui.type !== 'session') throw new ErreurHttp(403, 'Forcer une isolation est réservé à une session d’administrateur de VIGIE.');
+      portail.exiger(ctx, { role: 'admin', renfort: true });
+    }
+    const x = await moteur.executer({ type: b.type, appareil: b.appareil, motif: b.motif || '', auteur: qui.nom, forcer: !!b.forcer }).catch(actionErreur);
     tracer(ctx, qui, `action.${b.type}`, b.appareil || 'reseau', { etat: x.etat });
     return x;
   });
@@ -213,7 +237,9 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
   r.put('/api/reglages/ia', async ctx => {
     const s = admin(ctx);
     const b = await corps(ctx, S.ia);
-    if (b.cle || b.retirerCle) portail.exiger(ctx, { role: 'admin', renfort: true });
+    // Changer de fournisseur enverrait la clé enregistrée à un autre service : renfort, comme pour la clé.
+    const changeFournisseur = b.fournisseur && b.fournisseur !== magasin.reglage('ia').fournisseur && magasin.secret('ia', 'cle');
+    if (b.cle || b.retirerCle || changeFournisseur) portail.exiger(ctx, { role: 'admin', renfort: true });
     const { cle, retirerCle, ...reste } = b;
     const futur = { ...magasin.reglage('ia'), ...reste };
     if (['cloud', 'les-deux', 'secours'].includes(futur.mode) && !futur.modeleCloud) throw new ErreurHttp(400, 'Choisis le modèle en nuage avant ce mode.');
@@ -266,7 +292,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     const b = await corps(ctx, S.billetterie);
     if (b.cle || b.retirerCle || b.url !== undefined) portail.exiger(ctx, { role: 'admin', renfort: true });
     const { cle, retirerCle, ...reste } = b;
-    if (reste.url && !reste.url.startsWith('https://') && !/^http:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|localhost|hub-[a-z0-9-]+[:/])/.test(reste.url)) throw new ErreurHttp(400, 'Billetterie : https:// exigé hors du réseau local.');
+    if (reste.url && !urlBilletterieSure(reste.url)) throw new ErreurHttp(400, 'Billetterie : https:// exigé hors du réseau local, sans identifiants dans l’adresse.');
     if (cle) magasin.poserSecret('billetterie', 'cle', cle);
     if (retirerCle) magasin.poserSecret('billetterie', 'cle', null);
     magasin.poserReglage('billetterie', reste);

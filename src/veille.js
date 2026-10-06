@@ -148,6 +148,10 @@ export class Moteur {
         const k = a.mac || a.ip || a.id;
         const ports = (a.ports || []).filter(p => !p.state || p.state === 'open').map(p => p.port).sort((x, y) => x - y);
         neuf.appareils[k] = { ip: a.ip, ports, status: a.status, vlan: a.vlan };
+        // Signe d'intrusion caractérisé : suspect, hors liste blanche, danger au-delà du seuil — dès la première passe.
+        if (a.status === 'suspect' && !a.whitelisted && (a.dangerScore ?? 0) >= reaction.seuil) {
+          sorties.push({ gravite: 'critique', type: 'intrusion', titre: `Signe d’intrusion : ${nomAppareil(a)} (danger ${a.dangerScore}/100)`, texte: (a.scoreReasons?.trust || []).slice(0, 3).map(r => r.reason).join(' ; '), sujet: nomAppareil(a), cle: `intrusion:${k}`, appareil: a });
+        }
         if (!ancien) continue;
         const v = ancien.appareils?.[k];
         if (!v) {
@@ -156,10 +160,6 @@ export class Moteur {
           const nouveaux = ports.filter(p => !v.ports.includes(p));
           if (nouveaux.length) sorties.push({ gravite: nouveaux.some(p => PORTS_SENSIBLES.has(p)) ? 'eleve' : 'faible', type: 'port.nouveau', titre: `Port${nouveaux.length > 1 ? 's' : ''} ouvert${nouveaux.length > 1 ? 's' : ''} sur ${nomAppareil(a)} : ${nouveaux.join(', ')}`, texte: `${a.ip || ''} — service apparu depuis la passe précédente.`, sujet: nomAppareil(a), cle: `port.nouveau:${k}:${nouveaux.join('-')}` });
           if (v.vlan !== a.vlan && Number.isInteger(v.vlan) && Number.isInteger(a.vlan)) sorties.push({ gravite: 'info', type: 'config.derive', titre: `${nomAppareil(a)} est passé du VLAN ${v.vlan} au VLAN ${a.vlan}`, sujet: nomAppareil(a), cle: `vlan:${k}:${a.vlan}` });
-        }
-        // Signe d'intrusion caractérisé : suspect, hors liste blanche, danger au-delà du seuil.
-        if (a.status === 'suspect' && !a.whitelisted && (a.dangerScore ?? 0) >= reaction.seuil) {
-          sorties.push({ gravite: 'critique', type: 'intrusion', titre: `Signe d’intrusion : ${nomAppareil(a)} (danger ${a.dangerScore}/100)`, texte: (a.scoreReasons?.trust || []).slice(0, 3).map(r => r.reason).join(' ; '), sujet: nomAppareil(a), cle: `intrusion:${k}`, appareil: a });
         }
       }
       for (const v of m.vlans) neuf.vlans[v.id] = { isole: !!v.isolated, nom: v.name };
@@ -226,7 +226,7 @@ export class Moteur {
    * Une action sur un appareil, par MapMyLAN : instantané, exécution,
    * vérification, et retour à l'état d'avant si elle n'a pas pris.
    */
-  async executer({ type, appareil, motif = '', auteur, automatique = false, constat = null }) {
+  async executer({ type, appareil, motif = '', auteur, automatique = false, constat = null, forcer = false }) {
     if (!ACTIONS.includes(type)) throw new ErreurAction('Action inconnue.', 400);
     if (!this.sources.public().mapmylan.relie) throw new ErreurAction('MapMyLAN n’est pas relié : aucune action possible.');
     if (type === 'scan') {
@@ -239,11 +239,17 @@ export class Moteur {
     try { avant = await this.sources.appareil(appareil); } catch (e) { throw new ErreurAction(e.status === 404 ? 'Appareil inconnu de MapMyLAN.' : `MapMyLAN : ${e.message}.`, e.status === 404 ? 404 : 502); }
     const nom = nomAppareil(avant);
     // Le périmètre relu à chaque action : une plage retirée dans MapMyLAN l'est aussitôt pour VIGIE.
+    // Sans plages lisibles, aucune action : le repli sur toutes les plages privées ne vaut que pour regarder.
     const plg = await this.sources.mml('/api/devices/scan/ranges').catch(() => null);
-    this.sources.perimetre(Array.isArray(plg) ? plg : []);
+    const declarees = Array.isArray(plg) ? plg.filter(x => x?.enabled !== false && x?.cidr) : [];
+    if (!declarees.length) throw new ErreurAction('Les plages de MapMyLAN sont illisibles ou vides : VIGIE n’agit pas sans périmètre déclaré.', 409);
+    this.sources.perimetre(declarees);
     if (!this.sources.dansPerimetre(avant.ip)) throw new ErreurAction(`${nom} est hors du périmètre autorisé : VIGIE n’agit pas dessus.`, 403);
     if ((type === 'quarantine' || type === 'ban') && (avant.isMainRouter || TYPES_PROTEGES.includes(String(avant.customType || avant.type)))) {
+      // La passerelle, un serveur, l'hyperviseur : jamais seul, jamais par un jeton ;
+      // seulement une session d'administrateur qui le force après confirmation d'identité.
       if (automatique) throw new ErreurAction('Équipement d’infrastructure : jamais isolé automatiquement.', 403);
+      if (!forcer) throw new ErreurAction(`${nom} est un équipement d’infrastructure : l’isoler couperait d’autres appareils. Un administrateur peut le forcer depuis VIGIE, après confirmation de son identité.`, 403);
     }
     const instantane = { status: avant.status, vlan: avant.vlan ?? null, whitelisted: !!avant.whitelisted, ip: avant.ip };
     let etat = 'appliquee', resultat = '';
@@ -260,13 +266,18 @@ export class Moteur {
     if (ATTENDU[type] || type === 'unban') {
       let apres = null;
       try { apres = await this.sources.appareil(appareil); } catch { apres = null; }
-      const pris = apres && (ATTENDU[type] ? apres.status === ATTENDU[type] : !['quarantined', 'banned'].includes(apres.status));
-      if (!pris) {
+      const isole = st => ['quarantined', 'banned'].includes(st);
+      if (!apres) {
+        // Ne pas savoir n'est pas « n'a pas pris » : rien n'est défait, un appareil peut-être compromis reste isolé.
+        etat = 'averifier';
+        resultat = 'MapMyLAN n’a pas pu être relu après l’action : rien n’a été défait. À vérifier dans MapMyLAN.';
+      } else if (!(ATTENDU[type] ? apres.status === ATTENDU[type] : !isole(apres.status))) {
         etat = 'restauree';
-        try {
-          if (type !== 'unban' && !['quarantined', 'banned'].includes(instantane.status)) await this.sources.agir('unban', appareil);
-          resultat = `L’état attendu n’a pas été constaté${apres ? ` (statut : ${apres.status})` : ''} : retour à l’état d’avant.`;
-        } catch (e) { etat = 'echec'; resultat = `État attendu non constaté, et retour impossible : ${e.message}. À vérifier dans MapMyLAN.`; }
+        // Défaire seulement ce qui a pris de travers (isolé autrement que demandé) ; sinon rien n'a changé.
+        if (type !== 'unban' && isole(apres.status) && !isole(instantane.status)) {
+          try { await this.sources.agir('unban', appareil); resultat = `L’état attendu n’a pas été constaté (statut : ${apres.status}) : retour à l’état d’avant.`; }
+          catch (e) { etat = 'echec'; resultat = `État attendu non constaté, et retour impossible : ${e.message}. À vérifier dans MapMyLAN.`; }
+        } else resultat = `L’état attendu n’a pas été constaté (statut : ${apres.status}) : rien à défaire.`;
       }
     }
     const x = this.magasin.noterAction({ type, cible: appareil, cibleNom: nom, auteur, motif: motif || (constat ? `Constat ${constat}` : ''), automatique, etat, avant: instantane, resultat });
@@ -279,10 +290,12 @@ export class Moteur {
   async annuler(id, auteur) {
     const x = this.magasin.action(id);
     if (!x) throw new ErreurAction('Action inconnue.', 404);
-    if (x.etat !== 'appliquee' || !['quarantine', 'ban'].includes(x.type)) throw new ErreurAction('Cette action ne se défait pas.');
+    if (!['appliquee', 'averifier'].includes(x.etat) || !['quarantine', 'ban'].includes(x.type)) throw new ErreurAction('Cette action ne se défait pas.');
     if (['quarantined', 'banned'].includes(x.avant.status)) throw new ErreurAction('L’appareil était déjà isolé avant cette action : rien à défaire.');
     try { await this.sources.agir('unban', x.cible); } catch (e) { throw new ErreurAction(`MapMyLAN : ${e.message}.`, 502); }
-    const y = this.magasin.annulerAction(id, auteur, 'Appareil rendu au réseau.');
+    // MapMyLAN remet l'appareil « en ligne » : un statut d'avant comme « suspect » est perdu, on le dit.
+    const perdu = x.avant.status && !['online', 'offline', 'quarantined', 'banned'].includes(x.avant.status);
+    const y = this.magasin.annulerAction(id, auteur, perdu ? `Appareil rendu au réseau. Son statut d’avant (${x.avant.status}) n’est pas rétabli par MapMyLAN : à revérifier.` : 'Appareil rendu au réseau.');
     this.journal?.ecrire({ acteur: auteur, action: 'action.annulee', objet: x.cible, details: { action: id } });
     this.memoire.surIntervention({ ...y, type: 'unban', motif: `Annulation de ${LIBELLE_ACTION[x.type].toLowerCase()}`, etat: 'appliquee' });
     return y;
@@ -290,6 +303,8 @@ export class Moteur {
 
   // ---------- horloge ----------
   demarrer() {
+    const repris = this.magasin.reprendreInterrompus(this.maintenant());
+    if (repris.audits || repris.relectures) this.log.warn?.(`[veille] ${repris.audits} audit(s) et ${repris.relectures} relecture(s) interrompus par l’arrêt précédent, marqués comme tels.`);
     const boucle = async () => {
       if (this.arrete) return;
       const v = this.magasin.reglage('veille');

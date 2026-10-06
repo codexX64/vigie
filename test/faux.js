@@ -81,11 +81,15 @@ export function fauxServices(etat = etatInitial()) {
         const m = /^\/api\/devices\/([^/]+)(?:\/([a-z-]+))?$/.exec(q);
         const a = m && etat.appareils.find(x => x.id === m[1]);
         if (m && !a) return json(404, { error: 'Appareil inconnu.' });
-        if (m && !m[2] && req.method === 'GET') return json(200, { ...a, history: [] });
+        if (m && !m[2] && req.method === 'GET') {
+          if (etat.muet === a.id) return json(500, { error: 'MapMyLAN occupé.' });
+          return json(200, { ...a, history: [] });
+        }
         if (m && req.method === 'POST') {
           etat.actions.push({ type: m[2], id: a.id, corps: b });
           if (m[2] === 'deep-scan') return json(200, { ip: a.ip, ports: a.ports.map(x => ({ port: x.port, service: x.service })) });
           if (etat.actionPrend) a.status = m[2] === 'quarantine' ? 'quarantined' : m[2] === 'ban' ? 'banned' : 'online';
+          if (etat.muetApresAction) etat.muet = a.id;
           return json(200, { ok: true, output: '' });
         }
         return json(404, { error: 'Route inconnue.' });
