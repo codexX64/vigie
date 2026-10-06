@@ -335,8 +335,8 @@ async function pageEvenements() {
     const ev = (await api.get('/api/evenements?limite=300')).filter(e => tous || !e.acquitte);
     liste.replaceChildren(...(ev.length ? ev.map(e => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile g-${e.gravite}` }, icone(ICONE_G[e.gravite], 15)),
-      h('div', { class: 'grow1' }, h('strong', { text: e.titre }), h('small', { text: [e.texte, quand(e.quand), e.acquitte ? `acquitté par ${e.acquittePar}` : ''].filter(Boolean).join(' · ') })),
-      h('div', { class: 'fin' }, chipG(e.gravite), membre && !e.acquitte ? h('button', { class: 'btn sm', type: 'button', onclick: sur(async () => { await api.post(`/api/evenements/${e.id}/acquitter`, {}); await peindre(); }) }, 'Acquitter') : null)))
+      h('div', { class: 'grow1' }, h('strong', { text: e.titre }), h('small', { text: [LIB[e.gravite], e.texte, quand(e.quand), e.acquitte ? `acquitté par ${e.acquittePar}` : ''].filter(Boolean).join(' · ') })),
+      h('div', { class: 'fin' }, membre && !e.acquitte ? h('button', { class: 'btn sm', type: 'button', onclick: sur(async () => { await api.post(`/api/evenements/${e.id}/acquitter`, {}); await peindre(); }) }, 'Acquitter') : null)))
       : [h('p', { class: 'vide', text: tous ? 'Aucun événement.' : 'Rien en attente : tout est acquitté.' })]));
   };
   await peindre();
