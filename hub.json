@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "vigie",
   "name": "VIGIE",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Audit et veille de sécurité du réseau : règles Codex64 sans IA, relecture par l'IA de ton choix, réaction rapide, rapport PDF. Ajoute la page Vigie à MapMyLAN.",
   "icon": "shield",
   "repository": "https://github.com/CodexX64/vigie",
@@ -54,7 +54,7 @@
       "key": "IMAGE_TAG",
       "label": "Version de l'image",
       "type": "string",
-      "default": "1.0.0",
+      "default": "1.0.1",
       "help": "Étiquette de l'image vigie.",
       "advanced": true
     },
@@ -827,7 +827,7 @@
   },
   "ai": {
     "exposeActions": true,
-    "hints": "VIGIE audite la sécurité du réseau (règles Codex64, score sur 100 par domaine) et veille en continu. « État de la sécurité » pour le score et les priorités. Isoler un appareil coupe son accès au réseau : toujours demander validation, jamais la passerelle ni la machine du Hub."
+    "hints": "VIGIE audite la sécurité du réseau (règles Codex64, score sur 100 par domaine) et veille en continu. « État de la sécurité » pour le score et les priorités. Isoler un appareil coupe son accès au réseau : toujours demander validation. VIGIE refuse d’isoler la passerelle et les équipements d’infrastructure par le Hub, et n’agit que dans les plages déclarées dans MapMyLAN."
   },
   "accounts": {
     "tokenKey": "HUB_ADMIN_TOKEN",

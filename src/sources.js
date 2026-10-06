@@ -11,7 +11,7 @@ const DELAI = 15_000;
 const MAX_SONDES_TLS = 60;
 const PARALLELE_TLS = 6;
 const PORTS_TLS = new Set([443, 8443, 9443, 4443, 636, 993, 995, 465, 5986]);
-const PRIVEES = [[[10, 0, 0, 0], 8], [[172, 16, 0, 0], 12], [[192, 168, 0, 0], 16], [[100, 64, 0, 0], 10]].map(([o, b]) => `${o.join('.')}/${b}`);
+export const PRIVEES = [[[10, 0, 0, 0], 8], [[172, 16, 0, 0], 12], [[192, 168, 0, 0], 16], [[100, 64, 0, 0], 10]].map(([o, b]) => `${o.join('.')}/${b}`);
 
 export const estIPv4 = s => net.isIPv4(String(s || ''));
 
