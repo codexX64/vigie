@@ -1,0 +1,878 @@
+{
+  "$schema": "https://raw.githubusercontent.com/CodexX64/hub-registry/main/schema/hub-extension.v1.json",
+  "manifestVersion": 1,
+  "id": "vigie",
+  "name": "VIGIE",
+  "version": "1.0.0",
+  "description": "Audit et veille de sécurité du réseau : règles Codex64 sans IA, relecture par l'IA de ton choix, réaction rapide, rapport PDF. Ajoute la page Vigie à MapMyLAN.",
+  "icon": "shield",
+  "repository": "https://github.com/CodexX64/vigie",
+  "license": "MIT",
+  "minHubVersion": "0.9.0",
+  "install": {
+    "type": "compose",
+    "compose": "deploy/compose.hub.yml",
+    "remote": {
+      "supported": true,
+      "label": "Adresse de VIGIE",
+      "placeholder": "http://192.0.2.10:8170",
+      "defaultPort": 8170,
+      "setupHelp": "Pour une VIGIE déjà en service ailleurs : poser VIGIE_HUB_TOKEN dans son environnement, redémarrer, puis coller ce jeton ici."
+    },
+    "healthcheck": {
+      "type": "http",
+      "path": "/api/health",
+      "expect": 200,
+      "timeout": "5s"
+    },
+    "arch": [
+      "amd64",
+      "arm64"
+    ],
+    "resources": {
+      "ramMb": 384,
+      "cpu": 1.0,
+      "diskMb": 512
+    },
+    "ports": [
+      {
+        "name": "http",
+        "container": 8170,
+        "protocol": "http",
+        "expose": "proxy"
+      }
+    ],
+    "volumes": [
+      {
+        "name": "data",
+        "path": "/data"
+      }
+    ]
+  },
+  "config": [
+    {
+      "key": "IMAGE_TAG",
+      "label": "Version de l'image",
+      "type": "string",
+      "default": "1.0.0",
+      "help": "Étiquette de l'image vigie.",
+      "advanced": true
+    },
+    {
+      "key": "VIGIE_IA_MODE",
+      "label": "IA de relecture",
+      "type": "select",
+      "default": "aucune",
+      "required": true,
+      "options": [
+        {
+          "value": "aucune",
+          "label": "Aucune — le moteur de règles seul"
+        },
+        {
+          "value": "locale",
+          "label": "Locale — l'Ollama du Hub, rien ne sort du réseau"
+        },
+        {
+          "value": "cloud",
+          "label": "En nuage — Claude, GPT ou Kimi avec ta clé"
+        },
+        {
+          "value": "les-deux",
+          "label": "Les deux — la locale relit, le nuage tranche et rédige"
+        },
+        {
+          "value": "secours",
+          "label": "Secours — la locale, le nuage si elle échoue"
+        }
+      ],
+      "help": "L'IA relit chaque audit (confirme ou écarte les constats, rédige la synthèse) ; elle ne change ni les gravités ni le score. Se change ensuite dans VIGIE → Réglages."
+    },
+    {
+      "key": "VIGIE_IA_FOURNISSEUR",
+      "label": "Fournisseur en nuage",
+      "type": "select",
+      "default": "anthropic",
+      "options": [
+        {
+          "value": "anthropic",
+          "label": "Anthropic (Claude)"
+        },
+        {
+          "value": "openai",
+          "label": "OpenAI (GPT)"
+        },
+        {
+          "value": "kimi",
+          "label": "Moonshot (Kimi)"
+        }
+      ],
+      "showIf": {
+        "VIGIE_IA_MODE": [
+          "cloud",
+          "les-deux",
+          "secours"
+        ]
+      }
+    },
+    {
+      "key": "VIGIE_IA_MODELE",
+      "label": "Modèle en nuage",
+      "type": "string",
+      "default": "",
+      "pattern": "^[\\w.:/-]{0,120}$",
+      "help": "Le nom exact du modèle chez le fournisseur.",
+      "showIf": {
+        "VIGIE_IA_MODE": [
+          "cloud",
+          "les-deux",
+          "secours"
+        ]
+      }
+    },
+    {
+      "key": "VIGIE_IA_CLE",
+      "label": "Clé d'API du fournisseur",
+      "type": "secret",
+      "help": "Scellée par VIGIE, jamais relue. Les constats de l'audit partent chez ce fournisseur pour relecture.",
+      "showIf": {
+        "VIGIE_IA_MODE": [
+          "cloud",
+          "les-deux",
+          "secours"
+        ]
+      }
+    },
+    {
+      "key": "VIGIE_IA_APPELS_JOUR",
+      "label": "Plafond d'appels en nuage par jour",
+      "type": "integer",
+      "default": 20,
+      "min": 0,
+      "max": 1000,
+      "help": "Compteur local : au-delà, VIGIE n'appelle plus le nuage jusqu'au lendemain (la locale continue).",
+      "showIf": {
+        "VIGIE_IA_MODE": [
+          "cloud",
+          "les-deux",
+          "secours"
+        ]
+      }
+    },
+    {
+      "key": "HUB_TOKEN",
+      "label": "Jeton du Hub",
+      "type": "secret",
+      "generate": "random:32",
+      "help": "Créé par le Hub. Il lui ouvre la lecture, les audits et les actions de VIGIE — jamais les réglages ni les secrets. Il signe aussi les jetons dérivés des services voisins (page Vigie de MapMyLAN)."
+    },
+    {
+      "key": "HUB_ADMIN_TOKEN",
+      "label": "Jeton d'administration des comptes",
+      "type": "secret",
+      "generate": "random:48",
+      "advanced": true,
+      "help": "Généré par le Hub, distinct du jeton du Hub : il ne sert qu'à gérer les comptes de VIGIE depuis Comptes des services."
+    },
+    {
+      "key": "SOCLE_HTTP",
+      "label": "Accès sans HTTPS",
+      "type": "select",
+      "default": "0",
+      "required": true,
+      "options": [
+        {
+          "value": "0",
+          "label": "Non — l'interface de VIGIE est servie en HTTPS (par Relay)"
+        },
+        {
+          "value": "1",
+          "label": "Oui — réseau de confiance, mode dégradé"
+        }
+      ],
+      "help": "Les clés d'accès n'existent qu'en HTTPS. En mode dégradé, l'administrateur se connecte avec mot de passe et application d'authentification, et VIGIE l'affiche partout.",
+      "advanced": true
+    },
+    {
+      "key": "SOCLE_CLE",
+      "label": "Clé maîtresse",
+      "type": "secret",
+      "generate": "random:32",
+      "help": "Scelle la clé d'IA en nuage, les jetons docker-control et Telegram, la clé de billetterie et les secrets TOTP. Créée par le Hub, gardée dans son coffre, jamais sur le volume de VIGIE."
+    },
+    {
+      "key": "SOCLE_CLE_ANCIENNE",
+      "label": "Clé maîtresse remplacée",
+      "type": "secret",
+      "advanced": true,
+      "help": "Pendant une rotation seulement : la clé actuelle ici, une neuve dans « Clé maîtresse », redéployer, puis vider ce champ."
+    },
+    {
+      "key": "SOCLE_JETON_INSTALLATION",
+      "label": "Jeton d'installation",
+      "type": "secret",
+      "advanced": true,
+      "help": "Vide : VIGIE en tire un au premier démarrage et l'écrit dans ses journaux. Il ne sert qu'à créer le premier compte."
+    },
+    {
+      "key": "SOCLE_PROXYS",
+      "label": "Relais de confiance",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Plages (CIDR) des relais inverses autorisés à transmettre l'adresse du client. Vide : l'adresse vue est celle de la connexion."
+    },
+    {
+      "key": "SOCLE_ORIGINES",
+      "label": "Origines supplémentaires",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Adresses complètes acceptées en plus de celle de la page, quand un relais réécrit l'hôte."
+    },
+    {
+      "key": "SOCLE_URL_PUBLIQUE",
+      "label": "Adresse publique (courriels)",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Ex. https://vigie.exemple. Les liens des courriels et des tickets en partent."
+    },
+    {
+      "key": "SOCLE_SMTP_HOTE",
+      "label": "Relais SMTP",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Vide : les alertes de sécurité des comptes restent visibles dans VIGIE, sans courriel."
+    },
+    {
+      "key": "SOCLE_SMTP_PORT",
+      "label": "Port SMTP",
+      "type": "number",
+      "min": 1,
+      "advanced": true,
+      "help": "Vide : 465 en TLS, 587 en STARTTLS."
+    },
+    {
+      "key": "SOCLE_SMTP_SECURITE",
+      "label": "Chiffrement SMTP",
+      "type": "select",
+      "default": "tls",
+      "advanced": true,
+      "options": [
+        {
+          "value": "tls",
+          "label": "TLS dès la connexion (465)"
+        },
+        {
+          "value": "starttls",
+          "label": "STARTTLS exigé (587)"
+        }
+      ]
+    },
+    {
+      "key": "SOCLE_SMTP_UTILISATEUR",
+      "label": "Identifiant SMTP",
+      "type": "string",
+      "default": "",
+      "advanced": true
+    },
+    {
+      "key": "SOCLE_SMTP_MOTDEPASSE",
+      "label": "Mot de passe SMTP",
+      "type": "secret",
+      "advanced": true
+    },
+    {
+      "key": "SOCLE_SMTP_DE",
+      "label": "Adresse d'expédition",
+      "type": "string",
+      "default": "",
+      "advanced": true
+    }
+  ],
+  "api": {
+    "baseUrl": "{{service.url}}",
+    "auth": {
+      "type": "bearer",
+      "token": "{{service.token}}",
+      "localToken": "HUB_TOKEN",
+      "remoteToken": "HUB_TOKEN"
+    }
+  },
+  "capabilities": {
+    "provides": [
+      "security.audit"
+    ],
+    "requires": [
+      "network.inventory"
+    ],
+    "accepts": [
+      "fleet.inventory",
+      "containers.metrics",
+      "llm.chat",
+      "memory.learn"
+    ]
+  },
+  "triggers": [
+    {
+      "id": "audit.done",
+      "name": "Audit terminé",
+      "description": "Un audit vient de finir : score, distribution des gravités.",
+      "icon": "shield",
+      "group": "Audit",
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/audits",
+          "query": {
+            "limite": "10",
+            "statut": "termine"
+          }
+        },
+        "interval": "1m",
+        "items": "$",
+        "dedupeKey": "$.id"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "debut": {
+            "type": "integer"
+          },
+          "score": {
+            "type": "integer"
+          },
+          "declencheur": {
+            "type": "string"
+          },
+          "distribution": {
+            "type": "object"
+          }
+        }
+      },
+      "sample": {
+        "id": "Ab3dEf6hIj9k",
+        "debut": 1791014400000,
+        "score": 73,
+        "declencheur": "quotidien",
+        "distribution": {
+          "safe": 142,
+          "info": 18,
+          "faible": 11,
+          "eleve": 6,
+          "critique": 2
+        }
+      }
+    },
+    {
+      "id": "intrusion.detected",
+      "name": "Intrusion détectée",
+      "description": "Un appareil montre un signe d'intrusion caractérisé (suspect, hors liste blanche, danger au-delà du seuil).",
+      "icon": "alert",
+      "group": "Veille",
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/evenements",
+          "query": {
+            "type": "intrusion",
+            "limite": "20"
+          }
+        },
+        "interval": "30s",
+        "items": "$",
+        "dedupeKey": "$.id"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "quand": {
+            "type": "integer"
+          },
+          "gravite": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "titre": {
+            "type": "string"
+          },
+          "texte": {
+            "type": "string"
+          },
+          "sujet": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "Ab3dEf6hIj9k",
+        "quand": 1791014400000,
+        "gravite": "critique",
+        "type": "intrusion",
+        "titre": "Signe d’intrusion : android-3f2a (danger 92/100)",
+        "texte": "Balayage de ports vers le réseau",
+        "sujet": "android-3f2a"
+      }
+    },
+    {
+      "id": "isolation.auto",
+      "name": "Appareil isolé automatiquement",
+      "description": "La réaction rapide a mis un appareil en quarantaine (ou n'a pas pu).",
+      "icon": "shield",
+      "group": "Veille",
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/evenements",
+          "query": {
+            "type": "reaction",
+            "limite": "20"
+          }
+        },
+        "interval": "30s",
+        "items": "$",
+        "dedupeKey": "$.id"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "quand": {
+            "type": "integer"
+          },
+          "gravite": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "titre": {
+            "type": "string"
+          },
+          "texte": {
+            "type": "string"
+          },
+          "sujet": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "Ab3dEf6hIj9k",
+        "quand": 1791014400000,
+        "gravite": "critique",
+        "type": "reaction",
+        "titre": "android-3f2a isolé automatiquement",
+        "texte": "Signe d’intrusion. Fait. Annulable depuis VIGIE (Actions).",
+        "sujet": "android-3f2a"
+      }
+    },
+    {
+      "id": "alert.new",
+      "name": "Alerte de sécurité",
+      "description": "Tout événement de veille de gravité élevée ou critique : nouveau port sensible, trafic suspect, VLAN plus isolé, constat grave…",
+      "icon": "bell",
+      "group": "Veille",
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/evenements",
+          "query": {
+            "min": "eleve",
+            "limite": "50"
+          }
+        },
+        "interval": "1m",
+        "items": "$",
+        "dedupeKey": "$.id"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "quand": {
+            "type": "integer"
+          },
+          "gravite": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "titre": {
+            "type": "string"
+          },
+          "texte": {
+            "type": "string"
+          },
+          "sujet": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "Ab3dEf6hIj9k",
+        "quand": 1791014400000,
+        "gravite": "eleve",
+        "type": "port.nouveau",
+        "titre": "Port ouvert sur nas : 23",
+        "texte": "192.0.2.10 — service apparu depuis la passe précédente.",
+        "sujet": "nas"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "state",
+      "name": "État de la sécurité",
+      "description": "Score du dernier audit, par domaine, distribution des gravités, priorités, sources et veille.",
+      "icon": "shield",
+      "group": "Audit",
+      "capability": "security.audit",
+      "risk": "read",
+      "idempotent": true,
+      "params": [],
+      "request": {
+        "method": "GET",
+        "path": "/api/etat"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "audit": {
+            "type": "object"
+          },
+          "priorites": {
+            "type": "array"
+          }
+        }
+      },
+      "sample": {
+        "audit": {
+          "id": "Ab3dEf6hIj9k",
+          "score": 73,
+          "distribution": {
+            "safe": 142,
+            "info": 18,
+            "faible": 11,
+            "eleve": 6,
+            "critique": 2
+          }
+        },
+        "priorites": [
+          {
+            "titre": "API Docker ouverte sans authentification",
+            "sujet": "srv-app (192.0.2.11)",
+            "gravite": "critique"
+          }
+        ]
+      }
+    },
+    {
+      "id": "audit.run",
+      "name": "Lancer un audit",
+      "description": "Collecte (MapMyLAN, NEXARC, docker-control, sondes TLS), règles, score, puis relecture par l'IA si elle est réglée. Le résultat arrive par « Audit terminé ».",
+      "icon": "play",
+      "group": "Audit",
+      "capability": "security.audit",
+      "risk": "reversible",
+      "idempotent": false,
+      "params": [],
+      "request": {
+        "method": "POST",
+        "path": "/api/audits",
+        "body": {}
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "deja": {
+            "type": "boolean"
+          }
+        }
+      },
+      "sample": {
+        "id": "Ab3dEf6hIj9k",
+        "deja": false
+      }
+    },
+    {
+      "id": "host.isolate",
+      "name": "Isoler un appareil",
+      "description": "Quarantaine par MapMyLAN, dans les plages qu'il déclare : instantané, vérification, retour arrière si elle ne prend pas. Annulable depuis VIGIE.",
+      "icon": "shield",
+      "group": "Remédiation",
+      "capability": "security.audit",
+      "risk": "destructive",
+      "idempotent": true,
+      "params": [
+        {
+          "key": "appareil",
+          "label": "Appareil (identifiant MapMyLAN)",
+          "type": "string",
+          "required": true,
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        {
+          "key": "motif",
+          "label": "Motif",
+          "type": "string",
+          "default": ""
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/actions",
+        "body": {
+          "type": "quarantine",
+          "appareil": "{{params.appareil}}",
+          "motif": "{{params.motif}}"
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "etat": {
+            "type": "string"
+          },
+          "resultat": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "Kl3mNo6pQr9s",
+        "etat": "appliquee",
+        "resultat": "Fait"
+      }
+    },
+    {
+      "id": "host.deepscan",
+      "name": "Balayage approfondi d'un appareil",
+      "description": "Ports, services et versions d'un appareil, par MapMyLAN.",
+      "icon": "search",
+      "group": "Remédiation",
+      "capability": "security.audit",
+      "risk": "reversible",
+      "idempotent": true,
+      "params": [
+        {
+          "key": "appareil",
+          "label": "Appareil (identifiant MapMyLAN)",
+          "type": "string",
+          "required": true,
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/actions",
+        "body": {
+          "type": "deep-scan",
+          "appareil": "{{params.appareil}}"
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "etat": {
+            "type": "string"
+          },
+          "resultat": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "Kl3mNo6pQr9s",
+        "etat": "appliquee",
+        "resultat": "4 ports relevés"
+      }
+    },
+    {
+      "id": "watch.pass",
+      "name": "Passe de veille",
+      "description": "Relit les sources maintenant et signale ce qui a changé depuis la passe précédente.",
+      "icon": "eye",
+      "group": "Veille",
+      "capability": "security.audit",
+      "risk": "read",
+      "idempotent": true,
+      "params": [],
+      "request": {
+        "method": "POST",
+        "path": "/api/veille/passe",
+        "body": {}
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "evenements": {
+            "type": "integer"
+          }
+        }
+      },
+      "sample": {
+        "evenements": 2
+      }
+    }
+  ],
+  "probes": [
+    {
+      "id": "reachable",
+      "name": "Joignable",
+      "kind": "state",
+      "request": {
+        "method": "GET",
+        "path": "/api/health"
+      },
+      "value": "$.ok",
+      "states": {
+        "ok": [
+          true,
+          "true",
+          "ok"
+        ]
+      },
+      "interval": "30s"
+    },
+    {
+      "id": "score",
+      "name": "Score de sécurité",
+      "kind": "gauge",
+      "unit": "/100",
+      "request": {
+        "method": "GET",
+        "path": "/api/etat"
+      },
+      "value": "$.audit.score",
+      "thresholds": {
+        "warn": 70,
+        "crit": 50,
+        "direction": "below"
+      },
+      "interval": "5m"
+    },
+    {
+      "id": "critiques",
+      "name": "Constats critiques",
+      "kind": "gauge",
+      "request": {
+        "method": "GET",
+        "path": "/api/etat"
+      },
+      "value": "$.audit.distribution.critique",
+      "thresholds": {
+        "warn": 1,
+        "crit": 1,
+        "direction": "above"
+      },
+      "interval": "5m"
+    },
+    {
+      "id": "en.attente",
+      "name": "Événements non acquittés",
+      "kind": "gauge",
+      "request": {
+        "method": "GET",
+        "path": "/api/etat"
+      },
+      "value": "$.evenements.nonAcquittes",
+      "thresholds": {
+        "warn": 1,
+        "crit": 10,
+        "direction": "above"
+      },
+      "interval": "2m"
+    }
+  ],
+  "permissions": {
+    "dockerSocket": "none",
+    "privileged": false,
+    "hostNetwork": false,
+    "capAdd": [],
+    "egress": [
+      "api.anthropic.com",
+      "api.openai.com",
+      "api.moonshot.ai",
+      "api.telegram.org"
+    ]
+  },
+  "ai": {
+    "exposeActions": true,
+    "hints": "VIGIE audite la sécurité du réseau (règles Codex64, score sur 100 par domaine) et veille en continu. « État de la sécurité » pour le score et les priorités. Isoler un appareil coupe son accès au réseau : toujours demander validation, jamais la passerelle ni la machine du Hub."
+  },
+  "accounts": {
+    "tokenKey": "HUB_ADMIN_TOKEN",
+    "roles": [
+      "admin",
+      "membre",
+      "lecture"
+    ],
+    "adminRole": "admin",
+    "invitation": true,
+    "fields": {
+      "id": "$.id",
+      "name": "$.identifiant",
+      "role": "$.role",
+      "mfa": "$.a2f",
+      "created": "$.cree",
+      "lastSeen": "$.derniere"
+    },
+    "list": {
+      "method": "GET",
+      "path": "/api/compte/hub/comptes"
+    },
+    "create": {
+      "method": "POST",
+      "path": "/api/compte/hub/comptes",
+      "body": {
+        "identifiant": "{{params.username}}",
+        "role": "{{params.role}}"
+      }
+    },
+    "update": {
+      "method": "PATCH",
+      "path": "/api/compte/hub/comptes/{{params.id}}",
+      "body": {
+        "role": "{{params.role}}"
+      }
+    },
+    "reset": {
+      "method": "POST",
+      "path": "/api/compte/hub/comptes/{{params.id}}/reinit",
+      "body": {}
+    },
+    "remove": {
+      "method": "DELETE",
+      "path": "/api/compte/hub/comptes/{{params.id}}"
+    }
+  }
+}

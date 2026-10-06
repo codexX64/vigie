@@ -1,0 +1,26 @@
+# VIGIE seule, sans le Hub : docker compose up -d --build
+# Poser dans .env au moins VIGIE_HUB_TOKEN (24 caractères aléatoires ou plus),
+# MAPMYLAN_URL et MAPMYLAN_JETON (jeton dérivé : voir docs/INTEGRATION.md).
+# Le jeton d'installation du premier compte s'affiche dans
+# « docker compose logs vigie ».
+name: vigie
+
+services:
+  vigie:
+    build: .
+    image: ghcr.io/codexx64/vigie:1.0.0
+    container_name: vigie
+    restart: unless-stopped
+    ports: ["127.0.0.1:8170:8170"]
+    volumes: [vigie-data:/data]
+    env_file: [.env]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 384m
+    cpus: 1.0
+    pids_limit: 128
+
+volumes:
+  vigie-data:

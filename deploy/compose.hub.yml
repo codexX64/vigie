@@ -1,0 +1,74 @@
+# VIGIE installé par le Hub. Les {{...}} sont remplacés à l'installation :
+# secrets générés, port d'hôte, volume nommé, réseau partagé du Hub, et les
+# adresses des services voisins avec un jeton dérivé pour VIGIE seule.
+services:
+  vigie:
+    image: ghcr.io/codexx64/vigie:{{config.IMAGE_TAG}}
+    container_name: {{service.host}}
+    restart: unless-stopped
+    networks: [hub]
+    ports:
+      - "{{hostport.http}}:8170"
+    volumes:
+      - {{volume.data}}:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 384m
+    cpus: 1.0
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    environment:
+      DATA_DIR: /data
+      PORT: "8170"
+      VIGIE_HUB_TOKEN: "{{config.HUB_TOKEN}}"
+      # Les sources. Chaque jeton est dérivé par le Hub du jeton de la source,
+      # pour VIGIE seule : il ne vaut rien ailleurs, et la source le vérifie
+      # sans rien stocker. MapMyLAN est requis ; les autres, s'ils existent.
+      MAPMYLAN_URL: "{{provider.network.inventory.url}}"
+      MAPMYLAN_JETON: "{{provider.network.inventory.jetonCerveau}}"
+      NEXARC_URL: "{{provider.fleet.inventory.url}}"
+      NEXARC_JETON: "{{provider.fleet.inventory.jetonCerveau}}"
+      DOCKER_CONTROL_URL: "{{provider.containers.metrics.url}}"
+      # L'IA locale (Ollama) et SYNAPSE, la mémoire des audits.
+      IA_LOCALE_URL: "{{provider.llm.chat.url}}"
+      IA_LOCALE_MODELE: "{{provider.llm.chat.config.DEFAULT_MODEL}}"
+      SYNAPSE_URL: "{{provider.memory.learn.url}}"
+      SYNAPSE_JETON: "{{provider.memory.learn.jetonCerveau}}"
+      # Le choix d'IA fait ici : appliqué au démarrage quand il change.
+      VIGIE_IA_MODE: "{{config.VIGIE_IA_MODE}}"
+      VIGIE_IA_FOURNISSEUR: "{{config.VIGIE_IA_FOURNISSEUR}}"
+      VIGIE_IA_MODELE: "{{config.VIGIE_IA_MODELE}}"
+      VIGIE_IA_CLE: "{{config.VIGIE_IA_CLE}}"
+      VIGIE_IA_APPELS_JOUR: "{{config.VIGIE_IA_APPELS_JOUR}}"
+      # Comptes : clé maîtresse gardée par le Hub (jamais sur le volume).
+      SOCLE_CLE: "{{config.SOCLE_CLE}}"
+      SOCLE_CLE_ANCIENNE: "{{config.SOCLE_CLE_ANCIENNE}}"
+      SOCLE_HTTP: "{{config.SOCLE_HTTP}}"
+      SOCLE_JETON_INSTALLATION: "{{config.SOCLE_JETON_INSTALLATION}}"
+      SOCLE_JETON_ADMIN_HUB: "{{config.HUB_ADMIN_TOKEN}}"
+      SOCLE_PROXYS: "{{config.SOCLE_PROXYS}}"
+      SOCLE_ORIGINES: "{{config.SOCLE_ORIGINES}}"
+      SOCLE_URL_PUBLIQUE: "{{config.SOCLE_URL_PUBLIQUE}}"
+      SOCLE_THEME: "{{hub.theme}}"
+      SOCLE_SMTP_HOTE: "{{config.SOCLE_SMTP_HOTE}}"
+      SOCLE_SMTP_PORT: "{{config.SOCLE_SMTP_PORT}}"
+      SOCLE_SMTP_SECURITE: "{{config.SOCLE_SMTP_SECURITE}}"
+      SOCLE_SMTP_UTILISATEUR: "{{config.SOCLE_SMTP_UTILISATEUR}}"
+      SOCLE_SMTP_MOTDEPASSE: "{{config.SOCLE_SMTP_MOTDEPASSE}}"
+      SOCLE_SMTP_DE: "{{config.SOCLE_SMTP_DE}}"
+
+networks:
+  hub:
+    name: {{hub.network}}
+    external: true
+
+volumes:
+  {{volume.data}}:
+    name: {{volume.data}}
