@@ -8,7 +8,7 @@ name: vigie
 services:
   vigie:
     build: .
-    image: ghcr.io/codexx64/vigie:1.0.1
+    image: ghcr.io/codexx64/vigie:1.0.2
     container_name: vigie
     restart: unless-stopped
     ports: ["127.0.0.1:8170:8170"]

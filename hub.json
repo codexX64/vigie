@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "vigie",
   "name": "VIGIE",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Audit et veille de sécurité du réseau : règles Codex64 sans IA, relecture par l'IA de ton choix, réaction rapide, rapport PDF. Ajoute la page Vigie à MapMyLAN.",
   "icon": "shield",
   "repository": "https://github.com/CodexX64/vigie",
@@ -54,7 +54,7 @@
       "key": "IMAGE_TAG",
       "label": "Version de l'image",
       "type": "string",
-      "default": "1.0.1",
+      "default": "1.0.2",
       "help": "Étiquette de l'image vigie.",
       "advanced": true
     },
