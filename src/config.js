@@ -33,6 +33,7 @@ export function lireConfigVigie(env = process.env) {
     // quand il change ; les réglages de VIGIE le précisent ensuite.
     iaMode: { env: 'VIGIE_IA_MODE', type: 'choix', parmi: ['', 'aucune', 'locale', 'cloud', 'les-deux', 'secours'], defaut: '' },
     iaFournisseur: { env: 'VIGIE_IA_FOURNISSEUR', type: 'choix', parmi: ['anthropic', 'openai', 'kimi'], defaut: 'anthropic' },
+    iaModeleLocal: { env: 'VIGIE_IA_MODELE_LOCAL', type: 'chaine', motif: /^[\w.:/-]{1,120}$/, defaut: '' },
     iaModeleCloud: { env: 'VIGIE_IA_MODELE', type: 'chaine', motif: /^[\w.:/-]{1,120}$/, defaut: '' },
     iaCle: { env: 'VIGIE_IA_CLE', type: 'secret', min: 20 },
     iaAppelsJour: { env: 'VIGIE_IA_APPELS_JOUR', type: 'entier', min: 0, max: 1000, defaut: 20 },

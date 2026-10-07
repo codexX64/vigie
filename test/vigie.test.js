@@ -422,6 +422,15 @@ test('le choix d’IA fait dans le Hub s’applique au démarrage quand il chang
   v = await demarrer({ ...env, VIGIE_IA_MODE: 'secours', VIGIE_IA_MODELE: 'claude-essai' }, { log: silence });
   assert.equal(v.magasin.reglage('ia').mode, 'secours');
   await v.arreter();
+  // Le modèle local choisi dans le Hub (ou par son assistant) : c'est lui qui relit.
+  v = await demarrer({ ...env, VIGIE_IA_MODELE_LOCAL: 'qwen3.8:9b' }, { log: silence });
+  assert.deepEqual([v.magasin.reglage('ia').mode, v.magasin.reglage('ia').modeleLocal], ['locale', 'qwen3.8:9b']);
+  await v.arreter();
+  // Rendu vide dans le Hub : retour au modèle par défaut d'Ollama.
+  v = await demarrer({ ...env, IA_LOCALE_MODELE: 'qwen3:14b' }, { log: silence });
+  assert.equal(v.magasin.reglage('ia').modeleLocal, '');
+  assert.equal(v.ia.modeleLocal(), 'qwen3:14b');
+  await v.arreter();
 });
 
 test('redémarrage : un audit ou une relecture coupés ne restent pas « en cours »', async () => {

@@ -89,6 +89,34 @@
       "help": "L'IA relit chaque audit (confirme ou écarte les constats, rédige la synthèse) ; elle ne change ni les gravités ni le score. Se change ensuite dans VIGIE → Réglages."
     },
     {
+      "key": "VIGIE_IA_MODELE_LOCAL",
+      "label": "Modèle local",
+      "type": "select",
+      "optionsFrom": {
+        "from": {
+          "capability": "llm.chat"
+        },
+        "method": "GET",
+        "path": "/api/tags",
+        "select": "$.models",
+        "map": {
+          "value": "$.name",
+          "label": "$.name"
+        },
+        "exclude": [
+          "embed"
+        ]
+      },
+      "help": "Le modèle de l'Ollama du Hub qui relit les audits. Vide : celui d'Ollama par défaut. L'assistant du Hub le règle aussi (« connecte VIGIE à l'IA locale qwen3:8b »).",
+      "showIf": {
+        "VIGIE_IA_MODE": [
+          "locale",
+          "les-deux",
+          "secours"
+        ]
+      }
+    },
+    {
       "key": "VIGIE_IA_FOURNISSEUR",
       "label": "Fournisseur en nuage",
       "type": "select",

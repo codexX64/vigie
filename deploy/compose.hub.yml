@@ -45,6 +45,7 @@ services:
       VIGIE_IA_MODE: "{{config.VIGIE_IA_MODE}}"
       VIGIE_IA_FOURNISSEUR: "{{config.VIGIE_IA_FOURNISSEUR}}"
       VIGIE_IA_MODELE: "{{config.VIGIE_IA_MODELE}}"
+      VIGIE_IA_MODELE_LOCAL: "{{config.VIGIE_IA_MODELE_LOCAL}}"
       VIGIE_IA_CLE: "{{config.VIGIE_IA_CLE}}"
       VIGIE_IA_APPELS_JOUR: "{{config.VIGIE_IA_APPELS_JOUR}}"
       # Comptes : clé maîtresse gardée par le Hub (jamais sur le volume).

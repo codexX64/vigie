@@ -25,9 +25,11 @@ const CONTACT_SECURITE = 'https://github.com/CodexX64/vigie/security/advisories/
 // changements, ce qui a été réglé dans VIGIE reste.
 function appliquerIaDuHub(cfg, magasin, log) {
   if (!cfg.iaMode) return;
-  const empreinte = crypto.createHash('sha256').update(JSON.stringify([cfg.iaMode, cfg.iaFournisseur, cfg.iaModeleCloud, cfg.iaCle || '', cfg.iaAppelsJour])).digest('hex');
+  // Le modèle local n'entre dans l'empreinte que s'il est choisi : une mise à jour
+  // ne réapplique pas le réglage du Hub par-dessus ce qui a été réglé dans VIGIE.
+  const empreinte = crypto.createHash('sha256').update(JSON.stringify([cfg.iaMode, cfg.iaFournisseur, cfg.iaModeleCloud, cfg.iaCle || '', cfg.iaAppelsJour, ...(cfg.iaModeleLocal ? [cfg.iaModeleLocal] : [])])).digest('hex');
   if (magasin.memoire('ia_hub') === empreinte) return;
-  magasin.poserReglage('ia', { mode: cfg.iaMode, fournisseur: cfg.iaFournisseur, ...(cfg.iaModeleCloud ? { modeleCloud: cfg.iaModeleCloud } : {}), appelsJour: cfg.iaAppelsJour });
+  magasin.poserReglage('ia', { mode: cfg.iaMode, fournisseur: cfg.iaFournisseur, ...(cfg.iaModeleCloud ? { modeleCloud: cfg.iaModeleCloud } : {}), modeleLocal: cfg.iaModeleLocal || '', appelsJour: cfg.iaAppelsJour });
   if (cfg.iaCle) magasin.poserSecret('ia', 'cle', cfg.iaCle);
   magasin.poserMemoire('ia_hub', empreinte);
   log.info?.(`[ia] réglage du Hub appliqué : ${cfg.iaMode}`);
