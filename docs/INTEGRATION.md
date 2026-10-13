@@ -65,6 +65,13 @@ Types d'événements : `appareil.nouveau`, `port.nouveau`, `intrusion`,
 | `GET /api/bouclier/liste.txt?jeton=vgl_…` | pare-feu qui lit une URL | adresses bloquées, une par ligne |
 | `POST /api/sonde/eve` `{ evenements: [...] }` | sonde (jeton `vgs_…`) | EVE JSON de Suricata, 5 000 événements au plus |
 
+Chez MapMyLAN (2.2 ou plus), avec le jeton dérivé de VIGIE, rôle membre :
+`GET /api/passerelle` (le routeur principal, toutes les cinq minutes),
+`GET /api/passerelle/ips?depuis=` (alertes de l'IPS, chaque minute, en pause
+tant que la passerelle en envoie par syslog), `PUT /api/passerelle/bouclier`
+`{ ips }` (les adresses bloquées, à chaque changement). Une clé d'API UniFi
+posée dans VIGIE passe avant MapMyLAN.
+
 Réglages, passerelle, jetons de sonde et de liste : session d'administrateur
 sous renfort, jamais un jeton.
 

@@ -59,6 +59,13 @@ existent. Sur un réseau UniFi, c'est la passerelle UniFi qui inspecte (IPS Suri
 pot de miel, pare-feu) ; VIGIE lit ce qu'elle voit, décide, et lui rend des
 listes d'adresses à refuser. Rien n'est à installer ailleurs.
 
+**Relié tout seul par MapMyLAN.** Quand MapMyLAN pilote déjà le routeur
+principal (relié dans son « Équipement réseau », par le Hub), VIGIE s'en sert
+sans rien régler : elle y lit chaque minute les alertes de l'IPS et y tient
+les groupes d'adresses à refuser, avec le jeton que le Hub a dérivé pour elle
+(MapMyLAN 2.2 ou plus). Les identifiants du routeur restent dans MapMyLAN.
+Une clé d'API UniFi posée dans VIGIE passe avant.
+
 **Ce qu'il lit.** Un récepteur syslog (UDP et TCP, port 5514 par défaut,
 `SYSLOG_PORT` dans le Hub) : CEF d'UniFi Network (Activity Logging → SIEM
 Server), lignes du pare-feu (CyberSecure → Traffic Logging), et EVE JSON de
@@ -83,17 +90,20 @@ blocages automatiques par heure. Jamais une adresse privée ou réservée, un
 résolveur DNS public, Cloudflare (le tunnel du Hub), ni la liste blanche.
 Chaque blocage se lève en un clic. Les blocages vont :
 
-- sur la passerelle UniFi, dans deux listes d'adresses (« VIGIE · bloquées IPv4 » et
-  « … IPv6 ») par l'API d'intégration d'UniFi Network 9 ou plus. La clé
-  d'API ne part qu'à une passerelle dont le certificat a l'empreinte
-  confirmée par l'administrateur. Deux règles du pare-feu, posées une fois
-  dans UniFi, refusent ces listes en entrée et en sortie ; VIGIE vérifie
-  qu'elles existent ;
+- sur la passerelle : par MapMyLAN (groupes « VIGIE bloquees IPv4 » et
+  « … IPv6 »), ou directement par l'API d'intégration d'UniFi Network 9 ou
+  plus (listes « VIGIE · bloquées IPv4 » et « … IPv6 » ; la clé d'API ne part
+  qu'à une passerelle dont le certificat a l'empreinte confirmée par
+  l'administrateur). Deux règles du pare-feu, posées une fois dans UniFi,
+  refusent ces groupes en entrée et en sortie ; VIGIE vérifie qu'elles
+  existent ;
 - dans une liste texte (`/api/bouclier/liste.txt`, jeton dédié) pour un autre
   pare-feu qui lit une URL (pfSense, OPNsense, MikroTik).
 
-Mise en route : VIGIE → Bouclier, les trois cartes « Passerelle UniFi »,
-« Journaux de la passerelle » et « Liste blanche et émetteurs ».
+Mise en route : relier le routeur dans MapMyLAN suffit pour les alertes de
+l'IPS et les blocages ; restent les deux règles du pare-feu (VIGIE → Bouclier
+→ carte « Passerelle »), et, pour le pot de miel et les refus du pare-feu,
+les journaux de la passerelle (carte « Journaux de la passerelle »).
 
 ## Règles
 
