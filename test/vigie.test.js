@@ -46,8 +46,8 @@ before(async () => {
     DATA_DIR: path.join(tmp, 'data'), PORT: '0', HOTE: '127.0.0.1', VIGIE_HUB_TOKEN: JETON_HUB, SOCLE_JETON_INSTALLATION: INSTALL,
     MAPMYLAN_URL: ext + '/mml', MAPMYLAN_JETON: faux.jetons.mml, NEXARC_URL: ext + '/nxr', NEXARC_JETON: faux.jetons.nxr,
     DOCKER_CONTROL_URL: ext + '/dck', IA_LOCALE_URL: ext + '/ollama', IA_LOCALE_MODELE: 'qwen3:8b',
-    SYNAPSE_URL: ext + '/syn', SYNAPSE_JETON: faux.jetons.syn, VIGIE_ANTHROPIC_API: ext + '/anthropic', VIGIE_TELEGRAM_API: ext + '/tg',
-  }, { log: silence, sonde: fausseSonde });
+    SYNAPSE_URL: ext + '/syn', SYNAPSE_JETON: faux.jetons.syn, VIGIE_ANTHROPIC_API: ext + '/anthropic', VIGIE_TELEGRAM_API: ext + '/tg', VIGIE_SYSLOG_PORT: '0',
+  }, { log: silence, sonde: fausseSonde, fetchMenaces: async () => new Response('', { status: 404 }) });
   port = vigie.port;
   admin = new Client(port);
   await adminComplet(admin, { jeton: INSTALL });
@@ -412,23 +412,24 @@ test('sources : MapMyLAN plus ancien (trafic fermé) n’empêche pas l’audit'
 
 test('le choix d’IA fait dans le Hub s’applique au démarrage quand il change', async () => {
   const dossier = path.join(tmp, 'deux');
-  const env = { DATA_DIR: dossier, PORT: '0', HOTE: '127.0.0.1', VIGIE_HUB_TOKEN: JETON_HUB, SOCLE_JETON_INSTALLATION: INSTALL, IA_LOCALE_URL: ext + '/ollama', VIGIE_IA_MODE: 'locale' };
-  let v = await demarrer(env, { log: silence });
+  const env = { DATA_DIR: dossier, PORT: '0', HOTE: '127.0.0.1', VIGIE_HUB_TOKEN: JETON_HUB, SOCLE_JETON_INSTALLATION: INSTALL, IA_LOCALE_URL: ext + '/ollama', VIGIE_IA_MODE: 'locale', VIGIE_SYSLOG_PORT: '0' };
+  const o = { log: silence, fetchMenaces: async () => new Response('', { status: 404 }) };
+  let v = await demarrer(env, o);
   assert.equal(v.magasin.reglage('ia').mode, 'locale');
   v.magasin.poserReglage('ia', { mode: 'aucune' });
   await v.arreter();
-  v = await demarrer(env, { log: silence });
+  v = await demarrer(env, o);
   assert.equal(v.magasin.reglage('ia').mode, 'aucune', 'inchangé dans le Hub : le réglage de VIGIE reste');
   await v.arreter();
-  v = await demarrer({ ...env, VIGIE_IA_MODE: 'secours', VIGIE_IA_MODELE: 'claude-essai' }, { log: silence });
+  v = await demarrer({ ...env, VIGIE_IA_MODE: 'secours', VIGIE_IA_MODELE: 'claude-essai' }, o);
   assert.equal(v.magasin.reglage('ia').mode, 'secours');
   await v.arreter();
   // Le modèle local choisi dans le Hub (ou par son assistant) : c'est lui qui relit.
-  v = await demarrer({ ...env, VIGIE_IA_MODELE_LOCAL: 'qwen3.8:9b' }, { log: silence });
+  v = await demarrer({ ...env, VIGIE_IA_MODELE_LOCAL: 'qwen3.8:9b' }, o);
   assert.deepEqual([v.magasin.reglage('ia').mode, v.magasin.reglage('ia').modeleLocal], ['locale', 'qwen3.8:9b']);
   await v.arreter();
   // Rendu vide dans le Hub : retour au modèle par défaut d'Ollama.
-  v = await demarrer({ ...env, IA_LOCALE_MODELE: 'qwen3:14b' }, { log: silence });
+  v = await demarrer({ ...env, IA_LOCALE_MODELE: 'qwen3:14b' }, o);
   assert.equal(v.magasin.reglage('ia').modeleLocal, '');
   assert.equal(v.ia.modeleLocal(), 'qwen3:14b');
   await v.arreter();
