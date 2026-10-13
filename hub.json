@@ -4,7 +4,7 @@
   "id": "vigie",
   "name": "VIGIE",
   "version": "1.0.2",
-  "description": "Audit et veille de sécurité du réseau : règles Codex64 sans IA, relecture par l'IA de ton choix, réaction rapide, rapport PDF. Ajoute la page Vigie à MapMyLAN.",
+  "description": "Audit, veille et bouclier du réseau : règles Codex64, IPS de la passerelle UniFi croisé aux listes de menaces, attaquants bloqués à la frontière, IA au choix.",
   "icon": "shield",
   "repository": "https://github.com/CodexX64/vigie",
   "license": "MIT",
@@ -186,6 +186,16 @@
           "secours"
         ]
       }
+    },
+    {
+      "key": "SYSLOG_PORT",
+      "label": "Port des journaux de la passerelle",
+      "type": "integer",
+      "default": 5514,
+      "min": 1,
+      "max": 65535,
+      "required": true,
+      "help": "Port UDP et TCP ouvert sur la machine pour les journaux de la passerelle UniFi (UniFi Network → Integrations → Activity Logging → SIEM Server, et CyberSecure → Traffic Logging). Seuls les émetteurs déclarés dans VIGIE → Bouclier sont lus ; sans liste, toute adresse privée."
     },
     {
       "key": "HUB_TOKEN",
@@ -565,6 +575,118 @@
         "texte": "192.0.2.10 — service apparu depuis la passe précédente.",
         "sujet": "nas"
       }
+    },
+    {
+      "id": "threat.blocked",
+      "name": "Adresse bloquée",
+      "description": "Le bouclier vient de bloquer une adresse extérieure (seul au-delà du seuil, ou à la main).",
+      "icon": "shield",
+      "group": "Bouclier",
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/evenements",
+          "query": {
+            "type": "bouclier.bloque",
+            "limite": "50"
+          }
+        },
+        "interval": "1m",
+        "items": "$",
+        "dedupeKey": "$.id"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "quand": {
+            "type": "integer"
+          },
+          "gravite": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "titre": {
+            "type": "string"
+          },
+          "texte": {
+            "type": "string"
+          },
+          "sujet": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "Ab3dEf6hIj9k",
+        "quand": 1791014400000,
+        "gravite": "faible",
+        "type": "bouclier.bloque",
+        "titre": "Bloquée : 203.0.113.7 pour 1 h",
+        "texte": "IPS : ET SCAN Potential SSH Scan (sid 2001219) ; listée par Spamhaus DROP",
+        "sujet": "203.0.113.7"
+      }
+    },
+    {
+      "id": "host.compromised",
+      "name": "Machine du réseau suspecte",
+      "description": "Une machine du réseau se comporte comme une machine compromise : pot de miel touché, contact d'un serveur de commande, balayage interne.",
+      "icon": "alert",
+      "group": "Bouclier",
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/evenements",
+          "query": {
+            "type": "bouclier.interne",
+            "limite": "50"
+          }
+        },
+        "interval": "30s",
+        "items": "$",
+        "dedupeKey": "$.id"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "quand": {
+            "type": "integer"
+          },
+          "gravite": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "titre": {
+            "type": "string"
+          },
+          "texte": {
+            "type": "string"
+          },
+          "sujet": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "Ab3dEf6hIj9k",
+        "quand": 1791014400000,
+        "gravite": "critique",
+        "type": "bouclier.interne",
+        "titre": "Machine du réseau suspecte : 192.0.2.77 (score 100)",
+        "texte": "IPS, vers 192.0.2.2 (réseau interne) : Honeypot accessed",
+        "sujet": "192.0.2.77"
+      }
     }
   ],
   "actions": [
@@ -770,6 +892,127 @@
       "sample": {
         "evenements": 2
       }
+    },
+    {
+      "id": "shield.state",
+      "name": "État du bouclier",
+      "description": "Mode, adresses bloquées, menaces suivies, alertes récentes de l'IPS, machines du réseau suspectes, état de la passerelle UniFi et des listes de menaces.",
+      "icon": "shield",
+      "group": "Bouclier",
+      "capability": "security.audit",
+      "risk": "read",
+      "idempotent": true,
+      "params": [],
+      "request": {
+        "method": "GET",
+        "path": "/api/bouclier"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "actifs": {
+            "type": "integer"
+          },
+          "menaces": {
+            "type": "array"
+          },
+          "blocages": {
+            "type": "array"
+          },
+          "alertes": {
+            "type": "array"
+          },
+          "internes": {
+            "type": "array"
+          }
+        }
+      },
+      "sample": {
+        "mode": "actif",
+        "actifs": 3,
+        "menaces": [
+          {
+            "ip": "203.0.113.7",
+            "score": 140,
+            "seuil": 100
+          }
+        ],
+        "blocages": [
+          {
+            "ip": "203.0.113.7",
+            "etat": "actif"
+          }
+        ],
+        "alertes": [],
+        "internes": []
+      }
+    },
+    {
+      "id": "ip.block",
+      "name": "Bloquer une adresse",
+      "description": "Bloque une adresse extérieure à la frontière (passerelle UniFi et liste exportée). Jamais le réseau local, un DNS public, Cloudflare ni la liste blanche. Se lève dans VIGIE.",
+      "icon": "shield",
+      "group": "Bouclier",
+      "capability": "security.audit",
+      "risk": "reversible",
+      "idempotent": true,
+      "params": [
+        {
+          "key": "ip",
+          "label": "Adresse IP",
+          "type": "string",
+          "required": true,
+          "pattern": "^[0-9A-Fa-f:.]{2,45}$"
+        },
+        {
+          "key": "minutes",
+          "label": "Durée en minutes (vide : selon les récidives)",
+          "type": "string",
+          "default": "",
+          "pattern": "^(\\d{1,6})?$"
+        },
+        {
+          "key": "motif",
+          "label": "Motif",
+          "type": "string",
+          "default": ""
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/bouclier/bloquer",
+        "body": {
+          "ip": "{{params.ip}}",
+          "minutes": "{{params.minutes}}",
+          "motif": "{{params.motif}}"
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "etat": {
+            "type": "string"
+          },
+          "fin": {
+            "type": "integer"
+          }
+        }
+      },
+      "sample": {
+        "id": "Kl3mNo6pQr9s",
+        "ip": "203.0.113.7",
+        "etat": "actif",
+        "fin": 1791018000000
+      }
     }
   ],
   "probes": [
@@ -839,6 +1082,17 @@
         "direction": "above"
       },
       "interval": "2m"
+    },
+    {
+      "id": "bloquees",
+      "name": "Adresses bloquées",
+      "kind": "gauge",
+      "request": {
+        "method": "GET",
+        "path": "/api/bouclier"
+      },
+      "value": "$.actifs",
+      "interval": "2m"
     }
   ],
   "permissions": {
@@ -850,12 +1104,20 @@
       "api.anthropic.com",
       "api.openai.com",
       "api.moonshot.ai",
-      "api.telegram.org"
+      "api.telegram.org",
+      "www.spamhaus.org",
+      "feodotracker.abuse.ch",
+      "urlhaus.abuse.ch",
+      "threatfox.abuse.ch",
+      "rules.emergingthreats.net",
+      "cinsscore.com",
+      "lists.blocklist.de",
+      "cdn.jsdelivr.net"
     ]
   },
   "ai": {
     "exposeActions": true,
-    "hints": "VIGIE audite la sécurité du réseau (règles Codex64, score sur 100 par domaine) et veille en continu. « État de la sécurité » pour le score et les priorités. Isoler un appareil coupe son accès au réseau : toujours demander validation. VIGIE refuse d’isoler la passerelle et les équipements d’infrastructure par le Hub, et n’agit que dans les plages déclarées dans MapMyLAN."
+    "hints": "VIGIE audite la sécurité du réseau (règles Codex64, score sur 100 par domaine) et veille en continu. « État de la sécurité » pour le score et les priorités. Isoler un appareil coupe son accès au réseau : toujours demander validation. VIGIE refuse d’isoler la passerelle et les équipements d’infrastructure par le Hub, et n’agit que dans les plages déclarées dans MapMyLAN. Le bouclier (« État du bouclier ») lit les alertes de l'IPS de la passerelle UniFi et bloque seul les attaquants extérieurs ; « Bloquer une adresse » n'accepte qu'une adresse publique, hors liste blanche."
   },
   "accounts": {
     "tokenKey": "HUB_ADMIN_TOKEN",

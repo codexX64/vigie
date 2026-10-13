@@ -460,3 +460,18 @@ test('interface sous /v/<version>/ : une mise à jour change l’adresse de chaq
   assert.equal(ancien.headers.get('cache-control'), 'no-cache');
   assert.equal((await fetch(`${base}/v/${VERSION}/../../package.json`)).status, 404);
 });
+
+test('manifeste : une seule version partout, port des journaux publié en UDP et TCP', () => {
+  const lire = f => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+  const m = JSON.parse(lire('hub.json'));
+  assert.equal(m.version, VERSION);
+  assert.equal(JSON.parse(lire('package.json')).version, VERSION);
+  assert.equal(m.config.find(c => c.key === 'IMAGE_TAG').default, VERSION, 'le Hub installe l’image de cette version');
+  assert.match(lire('docker-compose.yml'), new RegExp(`vigie:${VERSION.replaceAll('.', '\\.')}\\n`));
+  const c = lire('deploy/compose.hub.yml');
+  for (const p of ['udp', 'tcp']) assert.ok(c.includes(`"0.0.0.0:{{config.SYSLOG_PORT}}:5514/${p}"`), p);
+  assert.ok(c.includes('VIGIE_SYSLOG_PORT_HOTE: "{{config.SYSLOG_PORT}}"'));
+  assert.equal(m.config.find(c => c.key === 'SYSLOG_PORT').default, 5514);
+  for (const id of ['threat.blocked', 'host.compromised']) assert.ok(m.triggers.some(t => t.id === id), id);
+  for (const id of ['shield.state', 'ip.block']) assert.ok(m.actions.some(a => a.id === id), id);
+});

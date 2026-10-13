@@ -11,7 +11,10 @@ services:
     image: ghcr.io/codexx64/vigie:1.0.2
     container_name: vigie
     restart: unless-stopped
-    ports: ["127.0.0.1:8170:8170"]
+    # 5514 : journaux de la passerelle UniFi (syslog CEF), UDP et TCP, sur le réseau.
+    ports: ["127.0.0.1:8170:8170", "5514:5514/udp", "5514:5514/tcp"]
+    environment:
+      VIGIE_SYSLOG_PORT_HOTE: "5514"
     volumes: [vigie-data:/data]
     env_file: [.env]
     read_only: true

@@ -17,7 +17,7 @@ COPY src ./src
 COPY web ./web
 USER vigie
 ENV NODE_ENV=production DATA_DIR=/data PORT=8170
-EXPOSE 8170
+EXPOSE 8170 5514/udp 5514/tcp
 VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:8170/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]

@@ -9,6 +9,10 @@ services:
     networks: [hub]
     ports:
       - "{{hostport.http}}:8170"
+      # Journaux de la passerelle (syslog, CEF) : un port fixe sur le réseau,
+      # celui que la passerelle UniFi vise. VIGIE ne lit que les émetteurs déclarés.
+      - "0.0.0.0:{{config.SYSLOG_PORT}}:5514/udp"
+      - "0.0.0.0:{{config.SYSLOG_PORT}}:5514/tcp"
     volumes:
       - {{volume.data}}:/data
     read_only: true
@@ -28,6 +32,9 @@ services:
       DATA_DIR: /data
       PORT: "8170"
       VIGIE_HUB_TOKEN: "{{config.HUB_TOKEN}}"
+      # Le bouclier : récepteur syslog dans le conteneur, port vu de la passerelle.
+      VIGIE_SYSLOG_PORT: "5514"
+      VIGIE_SYSLOG_PORT_HOTE: "{{config.SYSLOG_PORT}}"
       # Les sources. Chaque jeton est dérivé par le Hub du jeton de la source,
       # pour VIGIE seule : il ne vaut rien ailleurs, et la source le vérifie
       # sans rien stocker. MapMyLAN est requis ; les autres, s'ils existent.
