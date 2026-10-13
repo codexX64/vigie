@@ -12,6 +12,7 @@ import { evaluer, noter, finDeVie, systemeFinDeVie, priorites, REGLES } from '..
 import { lireVerdict, extraireJson, pourIA, filtreSortie } from '../src/ia.js';
 import { rapportPdf, largeur } from '../src/pdf.js';
 import { nomDerive } from '../src/api.js';
+import { VERSION } from '../src/config.js';
 import { ticketDe } from '../src/diffusion.js';
 import { fauxServices, etatInitial, fausseSonde, derive, SEMENCE_MML, SEMENCE_NXR, SEMENCE_SYN, JETON_DOCKER, CLE_IA, JETON_TG, CLE_TICKET } from './faux.js';
 
@@ -441,4 +442,20 @@ test('redémarrage : un audit ou une relecture coupés ne restent pas « en cour
   assert.equal(vigie.magasin.audit('coupe1').statut, 'echec');
   assert.equal(vigie.magasin.audit('coupe2').ia.statut, 'ignoree');
   assert.deepEqual(vigie.magasin.reprendreInterrompus(), { audits: 0, relectures: 0 });
+});
+
+test('interface sous /v/<version>/ : une mise à jour change l’adresse de chaque fichier, aucun cache ne rend l’ancienne interface', async () => {
+  const base = `http://127.0.0.1:${port}`;
+  const page = await (await fetch(base + '/')).text();
+  assert.ok(page.includes(`<script type="module" src="/v/${VERSION}/app.js"`));
+  assert.ok(page.includes(`"/socle/": "/v/${VERSION}/socle/"`), 'les modules du socle suivent la version par la carte d’import');
+  assert.match(page, /<script type="importmap" nonce="[^"]+">/);
+  const courant = await fetch(`${base}/v/${VERSION}/app.js`);
+  assert.equal(courant.status, 200);
+  assert.equal(courant.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  assert.equal((await fetch(`${base}/v/${VERSION}/socle/compte.js`)).headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  const ancien = await fetch(`${base}/v/0.0.1/app.js`);
+  assert.equal(ancien.status, 200, 'une page gardée en cache reçoit le fichier courant');
+  assert.equal(ancien.headers.get('cache-control'), 'no-cache');
+  assert.equal((await fetch(`${base}/v/${VERSION}/../../package.json`)).status, 404);
 });

@@ -14,7 +14,7 @@ import { Moteur } from './veille.js';
 import { creerApi } from './api.js';
 import {
   Debit, ErreurHttp, demarrerSocle, entetesSecurite, envelopper, nonceCsp, politiqueContenu,
-  repondreErreur, repondreJson, servirFichier,
+  repondreErreur, repondreJson, servirFichier, cheminVersionne,
 } from '../socle/src/index.js';
 
 const RACINE = path.resolve(import.meta.dirname, '..');
@@ -62,9 +62,13 @@ export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = gl
       if (await socle.portail.traiter(req, res, url, ctx)) return;
       if (await api.traiter(ctx)) return;
       if (!['GET', 'HEAD'].includes(req.method)) return repondreJson(res, 405, { error: 'Méthode non admise.' });
-      if (url.pathname.startsWith('/socle/') && servirFichier(req, res, path.join(RACINE, 'socle', 'web'), url.pathname.slice(6), { nonce, cache: 'public, max-age=3600' })) return;
-      const fichier = url.pathname === '/' ? '/index.html' : url.pathname;
-      if (servirFichier(req, res, path.join(RACINE, 'web'), fichier, { nonce, gamme: socle.cfg.gamme })) return;
+      // Sous /v/<version>/, les fichiers de cette version : gardés un an, l'adresse
+      // change à la suivante — ni le navigateur ni Cloudflare ne rendent l'ancienne interface.
+      const { chemin, durable } = cheminVersionne(url.pathname, VERSION);
+      const cache = durable ? 'public, max-age=31536000, immutable' : undefined;
+      if (chemin.startsWith('/socle/') && servirFichier(req, res, path.join(RACINE, 'socle', 'web'), chemin.slice(6), { nonce, cache: cache || 'public, max-age=3600' })) return;
+      const fichier = chemin === '/' ? '/index.html' : chemin;
+      if (servirFichier(req, res, path.join(RACINE, 'web'), fichier, { nonce, gamme: socle.cfg.gamme, version: VERSION, ...(cache ? { cache } : {}) })) return;
       repondreJson(res, 404, { error: 'Introuvable.' });
     } catch (e) { repondreErreur(res, e, { journal: log }); }
   }));

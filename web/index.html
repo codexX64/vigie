@@ -6,9 +6,10 @@
 <meta name="color-scheme" content="light dark">
 <title>VIGIE</title>
 <link rel="icon" href="/icone.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/socle/soma.css">
-<link rel="stylesheet" href="/vigie.css">
-<script type="module" src="/app.js" nonce="__NONCE__"></script>
+<link rel="stylesheet" href="/v/__VERSION__/socle/soma.css">
+<link rel="stylesheet" href="/v/__VERSION__/vigie.css">
+<script type="importmap" nonce="__NONCE__">{ "imports": { "/socle/": "/v/__VERSION__/socle/" } }</script>
+<script type="module" src="/v/__VERSION__/app.js" nonce="__NONCE__"></script>
 </head>
 <body></body>
 </html>
