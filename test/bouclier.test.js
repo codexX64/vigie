@@ -21,6 +21,8 @@ import { Riposte } from '../src/bouclier/riposte.js';
 import { Unifi, NOMS_LISTES } from '../src/bouclier/unifi.js';
 import { observer, requete, empreinte } from '../src/bouclier/tls.js';
 import { Recepteur } from '../src/bouclier/recepteur.js';
+import { Bouclier } from '../src/bouclier/index.js';
+import { depuisPasserelle } from '../src/bouclier/journaux.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bouclier-'));
 const silence = { info() {}, warn() {}, error() {} };
@@ -400,6 +402,90 @@ test('récepteur : UDP et TCP (lignes et cadrage par longueur), émetteurs filtr
     assert.equal(lues.length, 5);
     u.close();
   } finally { rc.arreter(); }
+});
+
+// ---------- la passerelle par MapMyLAN ----------
+test('passerelle par MapMyLAN : reliée seule, liste confiée, alertes de l’IPS relevées sans doublon, syslog et clé directe prioritaires', async () => {
+  const { db, magasin } = magasinNeuf();
+  const appels = [];
+  let passerelle = { reliee: true, nom: 'routeur', hote: '10.9.1.1', constructeur: 'unifi', libelle: 'Ubiquiti · UniFi', bouclier: true, ips: true };
+  let panne = false, ancien = false;
+  const alertes = [
+    { id: 'e1', quand: Date.now() - 5000, src: ATTAQUANT, dst: '10.9.1.20', dport: 22, gravite: 1, signature: 'ET SCAN Potential SSH Scan', sid: 2001219, action: 'blocked' },
+    { id: 'e2', quand: Date.now() - 4000, src: 'pas une ip', dst: null },
+  ];
+  const sources = {
+    public: () => ({ mapmylan: { relie: true } }),
+    appareilParIp: async () => null,
+    mml: async (chemin, o = {}) => {
+      appels.push([o.methode || 'GET', chemin, o.corps]);
+      if (chemin === '/api/passerelle') { if (ancien) throw Object.assign(new Error('Route inconnue.'), { status: 404 }); return passerelle; }
+      if (chemin.startsWith('/api/passerelle/ips?')) return alertes;
+      if (chemin === '/api/passerelle/bouclier') {
+        if (panne) throw Object.assign(new Error('Équipement injoignable : délai dépassé.'), { status: 502 });
+        return { passerelle: 'routeur', groupes: { 4: { id: 'g4', nom: 'VIGIE bloquees IPv4', n: o.corps.ips.length }, 6: { id: 'g6', nom: 'VIGIE bloquees IPv6', n: 0 } }, regles: { entrant: true, sortant: false, regles: [{ nom: 'VIGIE entree', actif: true }] } };
+      }
+      throw Object.assign(new Error('inconnu'), { status: 404 });
+    },
+  };
+  const signaux = [];
+  const moteur = { signaler: async e => { signaux.push(e); return e; }, reagir: async () => null };
+  const b = new Bouclier({ cfg: { donnees: path.join(tmp, 'passerelle'), syslogPort: 0 }, db, magasin, moteur, sources, fetch: async () => new Response('', { status: 404 }), log: silence });
+  assert.equal(b.riposte.unifi(), null, 'rien avant d’avoir lu MapMyLAN');
+  assert.equal(await b.releverIps(), 0);
+
+  await b.lirePasserelle();
+  assert.equal(b.riposte.unifi().forme, 'mapmylan', 'le routeur de MapMyLAN, sans rien régler');
+  assert.equal(await b.releverIps(), 1, 'une alerte lisible sur deux');
+  assert.match(appels.find(a => a[1].startsWith('/api/passerelle/ips?'))[1], /^\/api\/passerelle\/ips\?depuis=\d+&limite=1000$/);
+  await attendre(20);
+  const e = await b.riposte.synchroniser({ forcer: true });
+  assert.deepEqual(appels.filter(a => a[0] === 'PUT').at(-1), ['PUT', '/api/passerelle/bouclier', { ips: [ATTAQUANT] }], 'l’attaquant vu par l’IPS est bloqué à la frontière');
+  assert.deepEqual([e.ok, e.voie, e.passerelle, e.listes[4].nom, e.regles.sortant], [true, 'mapmylan', 'routeur', 'VIGIE bloquees IPv4', false]);
+  const vue = b.etat();
+  assert.deepEqual([vue.unifi.relie, vue.unifi.directe, vue.passerelle.reliee, vue.passerelle.releve.lues, vue.passerelle.releve.active], [true, false, true, 1, true]);
+  assert.equal(vue.alertes[0].capteur, 'passerelle:routeur');
+
+  // La même alerte relue : pas comptée deux fois.
+  const score = b.correlateur.menacesActuelles()[0].score;
+  assert.equal(await b.releverIps(), 0);
+  assert.equal(b.correlateur.menacesActuelles()[0].score, score);
+  // Des journaux syslog arrivent : la relève se tait.
+  const avant = appels.length;
+  b.derniereIpsSyslog = Date.now();
+  assert.equal(await b.releverIps(), 0);
+  assert.equal(appels.length, avant, 'aucune relève pendant que syslog parle');
+  assert.equal(b.etat().passerelle.releve.active, false);
+
+  // MapMyLAN en panne : dit une fois, nommé.
+  panne = true;
+  const ko = await b.riposte.synchroniser({ forcer: true });
+  assert.match(ko.erreur, /^MapMyLAN : Équipement injoignable/);
+  assert.equal(signaux.filter(x => x.type === 'bouclier.passerelle').length, 1);
+  panne = false;
+
+  // Une clé d'API posée dans VIGIE passe avant MapMyLAN.
+  magasin.poserReglage('bouclier', { unifiHote: '10.9.1.1', unifiFp: 'sha256:' + 'ab'.repeat(32) });
+  magasin.poserSecret('bouclier', 'cleUnifi', 'cle-unifi-essai-0123456789');
+  assert.notEqual(b.riposte.unifi().forme, 'mapmylan');
+  magasin.poserSecret('bouclier', 'cleUnifi', null);
+  assert.equal(b.riposte.unifi().forme, 'mapmylan');
+
+  // Un routeur qui ne sait pas tenir de liste, puis un MapMyLAN trop ancien.
+  passerelle = { ...passerelle, constructeur: 'routeros', bouclier: false, ips: false };
+  await b.lirePasserelle();
+  assert.equal(b.riposte.unifi(), null);
+  ancien = true;
+  await b.lirePasserelle();
+  assert.deepEqual([b.passerelle.reliee, b.passerelle.ancien], [false, true]);
+  b.arreter();
+});
+
+test('alerte de l’IPS relue par MapMyLAN : même forme qu’une alerte syslog', () => {
+  const o = depuisPasserelle({ quand: 1, src: ATTAQUANT, dst: '10.9.1.20', dport: 22, proto: 'TCP', gravite: 4, signature: 'x', sid: 7, categorie: 'Misc', action: 'blocked' }, 'passerelle:r');
+  assert.deepEqual([o.type, o.gravite, o.action, o.proto, o.sid, o.capteur], ['ips', 3, 'bloque', 'tcp', 7, 'passerelle:r']);
+  assert.equal(depuisPasserelle({ src: 'x', dst: 'y' }), null);
+  assert.equal(depuisPasserelle(null), null);
 });
 
 // ---------- l'API, de bout en bout ----------
