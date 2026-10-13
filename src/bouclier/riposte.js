@@ -42,8 +42,8 @@ export function preparerBase(db) {
 }
 
 export class Riposte {
-  constructor({ db, magasin, journal = null, signaler = async () => null, maintenant = () => Date.now(), log = console, unifiFabrique = o => new Unifi(o) }) {
-    Object.assign(this, { db, magasin, journal, signaler, maintenant, log, unifiFabrique });
+  constructor({ db, magasin, journal = null, signaler = async () => null, maintenant = () => Date.now(), log = console, unifiFabrique = o => new Unifi(o), passerelleAuto = () => null }) {
+    Object.assign(this, { db, magasin, journal, signaler, maintenant, log, unifiFabrique, passerelleAuto });
     preparerBase(db);
     this.etatUnifi = this.magasin.memoire('unifi_etat', { ok: null, erreur: null, synchro: null, listes: {}, regles: null });
     this.aSynchroniser = true;
@@ -147,11 +147,15 @@ export class Riposte {
     return n;
   }
 
+  /**
+   * La passerelle qui reçoit les blocages : reliée directement (clé d'API
+   * posée dans VIGIE), sinon celle que MapMyLAN pilote déjà — rien à régler.
+   */
   unifi() {
     const r = this.reglage();
     const cle = this.magasin.secret('bouclier', 'cleUnifi');
-    if (!r.unifiHote || !cle) return null;
-    return this.unifiFabrique({ hote: r.unifiHote, port: r.unifiPort || 443, fp: r.unifiFp || null, cle });
+    if (r.unifiHote && cle) return this.unifiFabrique({ hote: r.unifiHote, port: r.unifiPort || 443, fp: r.unifiFp || null, cle });
+    return this.passerelleAuto() || null;
   }
 
   /** La passerelle reçoit la liste des adresses bloquées (les plus menaçantes d'abord, au plafond près). */
@@ -168,11 +172,11 @@ export class Riposte {
         const listes = await u.synchroniser(ips);
         let regles = this.etatUnifi.regles;
         try { regles = await u.regles(listes); } catch (e) { regles = { erreur: e.message }; }
-        this.etatUnifi = { ok: true, erreur: null, synchro: this.maintenant(), listes, regles, envoyees: ips.length, forme: u.forme };
+        this.etatUnifi = { ok: true, erreur: null, synchro: this.maintenant(), listes, regles, envoyees: ips.length, forme: u.forme, voie: u.forme === 'mapmylan' ? 'mapmylan' : 'directe', passerelle: u.nom || '' };
       } catch (e) {
         this.aSynchroniser = true;
         const avant = this.etatUnifi.ok;
-        this.etatUnifi = { ...this.etatUnifi, ok: false, erreur: e instanceof ErreurUnifi || e.code ? e.message : String(e.message || e), essai: this.maintenant() };
+        this.etatUnifi = { ...this.etatUnifi, ok: false, erreur: e instanceof ErreurUnifi || e.code ? e.message : String(e.message || e), essai: this.maintenant(), voie: u.forme === 'mapmylan' ? 'mapmylan' : 'directe', passerelle: u.nom || '' };
         if (avant !== false) await this.signaler({ gravite: 'eleve', type: 'bouclier.passerelle', titre: 'La passerelle UniFi ne reçoit plus les blocages', texte: this.etatUnifi.erreur, cle: 'bouclier.passerelle' });
       }
       this.magasin.poserMemoire('unifi_etat', this.etatUnifi);

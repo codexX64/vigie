@@ -113,6 +113,19 @@ export function depuisEve(o, capteur) {
   }
 }
 
+/** Une alerte de l'IPS relevée par MapMyLAN sur la passerelle (GET /api/passerelle/ips). */
+export function depuisPasserelle(e, capteur) {
+  if (!e || typeof e !== 'object') return null;
+  const src = normaliser(e.src), dst = normaliser(e.dst);
+  if (!src && !dst) return null;
+  return {
+    quand: Number(e.quand) || Date.now(), capteur, type: 'ips', src, dst, sport: entier(e.sport), dport: entier(e.dport), proto: proto(e.proto),
+    action: /block|drop|reject/i.test(String(e.action || '')) ? 'bloque' : 'alerte',
+    gravite: [1, 2, 3, 4].includes(e.gravite) ? Math.min(e.gravite, 3) : 3,
+    signature: texte(e.signature), sid: Number(e.sid) || null, categorie: texte(e.categorie, 80), regle: '', domaine: null,
+  };
+}
+
 /** Une ligne reçue par syslog → observation, ou null si elle ne dit rien d'utile. */
 export function lireLigne(ligne, capteur = 'syslog', quand = Date.now()) {
   const msg = messageSyslog(ligne);
