@@ -5,6 +5,7 @@
 //   const ctx = portail.contexte(req, res);
 //   if (await portail.traiter(req, res, url, ctx)) return;
 //   portail.exiger(ctx, { role: 'admin' });   // avant chaque route protégée
+import net from 'node:net';
 import { Debit, adresseClient, estSecurise, hoteLocal, lireCookies, lireCorps, origineDe, poseCookie, repondreJson } from './http.js';
 import { valider } from './schema.js';
 import { ErreurHttp, aleatoire, egal, sha256hex } from './outils.js';
@@ -62,8 +63,11 @@ export class Portail {
     try { rpId = origine ? new URL(origine).hostname : null; } catch { rpId = null; }
     // Contexte sûr au sens du navigateur : HTTPS, ou localhost.
     const sur = securise || hoteLocal(req.headers.host);
+    // Une clé d'accès se lie à un nom : ouvert par son adresse IP, même en
+    // HTTPS, le service n'en propose ni n'en demande (le navigateur refuserait).
+    const cleIci = sur && !!rpId && !net.isIP(rpId.replace(/^\[|\]$/g, ''));
     const cookies = lireCookies(req.headers.cookie);
-    const ctx = { req, res, ip, securise, sur, origine, rpId, cookies, appareil: appareilDe(req.headers['user-agent']) };
+    const ctx = { req, res, ip, securise, sur, cleIci, origine, rpId, cookies, appareil: appareilDe(req.headers['user-agent']) };
     ctx.jeton = cookies[this.nomCookie(ctx, 'sid')] || null;
     ctx.session = this.comptes.session(ctx.jeton);
     // Le domaine vu par le navigateur : il dit quelles clés d'accès s'ouvrent ici.
@@ -71,7 +75,7 @@ export class Portail {
     return ctx;
   }
 
-  ctxCle(ctx) { return { securise: ctx.sur, origine: ctx.origine, rpId: ctx.rpId }; }
+  ctxCle(ctx) { return { securise: ctx.cleIci, origine: ctx.origine, rpId: ctx.rpId }; }
 
   poserSession(ctx, s) {
     const maxAge = Math.max(0, (s.expire - Date.now()) / 1000);
@@ -126,7 +130,7 @@ export class Portail {
     const s = ctx.session;
     const politique = c.politique();
     return {
-      service: this.service.nom, installe: c.estInstalle(), securise: ctx.securise, cles: ctx.sur && !c.modeHttp,
+      service: this.service.nom, installe: c.estInstalle(), securise: ctx.securise, cles: ctx.cleIci && !c.modeHttp,
       modeHttp: c.modeHttp, politique,
       // Installé par le Hub : le premier compte se crée depuis le Hub.
       ...(this.jetonAdminHub && !c.estInstalle() ? { parHub: true } : {}),
@@ -278,7 +282,7 @@ export class Portail {
       return {
         compte: c.publicDe(s.compteLigne), cles: c.clesDe(s.compte), sessions: c.sessionsDe(s.compte, s.id),
         alertes: c.alertesDe(s.compte), politique: c.politique(), methodesRenfort: c.methodesRenfort(s.compteLigne, s.rp), envoiCourriel: !!this.courriel,
-        renfortJusqua: c.estRenforcee(s) ? s.renfort + 5 * 60e3 : 0, clesPossibles: ctx.sur && !c.modeHttp, modeHttp: c.modeHttp,
+        renfortJusqua: c.estRenforcee(s) ? s.renfort + 5 * 60e3 : 0, clesPossibles: ctx.cleIci && !c.modeHttp, modeHttp: c.modeHttp,
       };
     }
 

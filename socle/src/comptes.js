@@ -13,6 +13,7 @@
 //      sessions et laisse une trace ;
 //   3. personne n'inscrit un facteur à la place d'un autre : un administrateur
 //      invite, exige ou réinitialise, il ne pose jamais de secret.
+import net from 'node:net';
 import crypto from 'node:crypto';
 import { hacher, verifier as verifierMdp } from './argon.js';
 import { refus as refusMdp } from './motdepasse.js';
@@ -471,7 +472,7 @@ export class Comptes {
   }
 
   exigerContexteCle(ctx) {
-    if (!ctx?.securise || !ctx.origine || !ctx.rpId) throw erreur(400, 'Les clés d’accès exigent une connexion HTTPS (ou localhost).');
+    if (!ctx?.securise || !ctx.origine || !ctx.rpId) throw erreur(400, 'Les clés d’accès exigent une connexion HTTPS par un nom, pas par une adresse IP (ou localhost).');
   }
 
   cleEnregistree(credId) { return this.db.prepare('SELECT * FROM socle_cles WHERE cred = ?').get(String(credId || '')) || null; }
@@ -679,6 +680,8 @@ export class Comptes {
   // Les clés d'un compte que ce domaine peut ouvrir : liées à lui, ou d'avant
   // l'apprentissage du domaine (rp vide).
   clesUtilisables(compteId, rp) {
+    // Une adresse IP : aucune clé ne s'y ouvre, le navigateur n'en présente que sur un nom.
+    if (rp && net.isIP(rp.replace(/^\[|\]$/g, ''))) return [];
     const toutes = this.db.prepare('SELECT cred, rp FROM socle_cles WHERE compte = ?').all(compteId);
     return rp ? toutes.filter(k => !k.rp || k.rp === rp) : toutes;
   }
@@ -693,7 +696,7 @@ export class Comptes {
 
   async renforcer(session, { methode, code, motDePasse, reponse, ctx, ip }) {
     const c = session.compteLigne;
-    const permises = this.methodesRenfort(c, ctx?.securise ? ctx.rpId : undefined);
+    const permises = this.methodesRenfort(c, session.rp);
     if (!permises.includes(methode)) throw erreur(400, 'Utilise ton facteur le plus fort.', { methodes: permises });
     const cles = [`ip:${ip}`, `compte:${c.identifiant}`];
     this.limiteur.controler(cles);

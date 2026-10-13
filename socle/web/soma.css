@@ -575,3 +575,141 @@ textarea.field{min-height:90px;resize:vertical;line-height:1.5}
 .porte .sans-hub{margin-top:18px;border-top:1px solid var(--hair-soft);padding-top:12px}
 .porte .sans-hub summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .porte .sans-hub .wfoot{padding:16px 0 0;border-top:none;margin-top:8px}
+
+/* Graphiques communs (graphes.js) : couleurs par classes, lues dans les jetons
+   de la gamme ; aucune couleur en attribut. */
+body{--g1:var(--accent);--g2:var(--ok);--g3:var(--warn);--g4:var(--alarm);--g5:var(--ink-soft);--g6:var(--muted)}
+.g-c1{--g:var(--g1)}.g-c2{--g:var(--g2)}.g-c3{--g:var(--g3)}.g-c4{--g:var(--g4)}.g-c5{--g:var(--g5)}.g-c6{--g:var(--g6)}
+.g-ok{--g:var(--ok)}.g-degrade{--g:var(--warn)}.g-incident{--g:var(--alarm)}.g-vide{--g:var(--well)}
+.graphe{position:relative;min-width:0}
+.graphe svg{display:block;overflow:visible}
+.graphe text{font-family:var(--sans);font-size:10px;fill:var(--muted)}
+.g-zone{width:100%;min-width:0}
+.g-grille{stroke:var(--hair);stroke-dasharray:3 5;fill:none}
+.g-trait{fill:none;stroke:var(--g);stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+.g-aire{fill:var(--g);fill-opacity:.1;stroke:none}
+.g-repere path{stroke:var(--muted);stroke-dasharray:3 3}
+.g-repere circle{fill:var(--g);stroke:var(--surface);stroke-width:2}
+.g-capte{fill:transparent;cursor:crosshair}
+.g-legende{display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:12px;font-size:11.5px;color:var(--muted);min-width:0}
+.g-legende button{display:inline-flex;align-items:center;gap:6px;font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.g-legende button[aria-pressed="false"]{opacity:.4}
+.g-legende span{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.g-legende b{font-family:var(--mono);font-weight:400;color:var(--ink-soft)}
+.g-pastille{width:8px;height:8px;border-radius:2px;background:var(--g);display:inline-block;flex:none}
+.g-fond-anneau{fill:none;stroke:var(--well);stroke-width:11}
+.g-arc{fill:none;stroke:var(--g);stroke-width:11}
+.g-arc:hover{stroke-width:14}
+.graphe text.g-centre{font-size:21px;fill:var(--ink);font-weight:500;letter-spacing:-.03em}
+.g-anneau{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.g-anneau .g-legende.fixe{flex-direction:column;gap:8px;margin:0}
+.g-jauge{display:flex;justify-content:center}
+.g-cal{width:100%;height:auto}
+.g-cal rect{fill:var(--g)}
+.g-cal rect.g-ok{fill-opacity:.5}
+.g-cal rect:hover{stroke:var(--ink);stroke-width:1}
+.g-capacite{display:flex;gap:2px;height:16px;min-width:0}
+.g-capacite i{flex:1;border-radius:1px;background:var(--g)}
+.g-capacite i.g-ok{opacity:.38}
+.g-capacite i.g-degrade{opacity:.75}
+.g-tuiles{display:flex;gap:4px;height:84px;min-width:0}
+.g-tuile{flex-basis:0;min-width:0;border-radius:6px;padding:9px 10px;background:color-mix(in srgb,var(--g) 15%,transparent);border:1px solid color-mix(in srgb,var(--g) 38%,transparent);overflow:hidden;display:flex;flex-direction:column;gap:3px}
+.g-tuile b{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-tuile span{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-etincelle{display:block;overflow:visible}
+.g-bulle{position:fixed;z-index:300;pointer-events:none;background:var(--surface);color:var(--ink);border-radius:8px;box-shadow:var(--lift-hi);padding:8px 11px;font-size:12px;max-width:260px;line-height:1.45}
+.g-bulle b{display:block;margin-bottom:2px;font-weight:600}
+.g-bulle[hidden]{display:none}
+
+/* Bandeau d'indicateurs (figs.bandeau-kpi) : une ligne de chiffres séparés
+   d'un filet, l'étincelle en bas à droite. Offert à toutes les gammes. */
+.fig .g-etincelle{margin-top:8px;opacity:.7}
+
+/* Gamme Exploitation : interface d'exploitation sobre, surfaces neutres, un
+   accent vert sauge, rayons courts, Geist. Claire ou sombre selon le système
+   ou la bascule. Choisie par SOCLE_THEME=exploitation. */
+html:root[data-gamme="exploitation"]{
+  --paper:#F7F7F5;--surface:#FFFFFF;--well:#F0F1EE;--hair:#E1E3DE;--hair-soft:#EBECE8;
+  --ink:#24272B;--ink-soft:#4F565D;--muted:#646A71;--faint:#7C8288;
+  --accent:#386A50;--wash:#E4EEE8;--alarm:#AD4E4E;--alarm-wash:#F7E9E9;--warn:#896630;--warn-wash:#F5EEE1;
+  --ok:#3B7454;--ok-wash:#E5EFE9;--on-ink:#FFFFFF;
+  --lift:0 0 0 1px #E1E3DE;
+  --lift-hi:0 0 0 1px #D5D8D2,0 16px 48px rgba(40,50,43,.12);
+  --grain:0;
+  --sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r-ctl:5px;--r-carte:7px;
+  --x-c1:#5C8E73;--x-c2:#6F829A;--x-c3:#9A8A62;--x-c4:#A07E91;--x-c5:#A9786F;--x-c6:#5E8783;
+  color-scheme:light}
+@media (prefers-color-scheme:dark){html:root[data-gamme="exploitation"]:not([data-theme="light"]){
+  --paper:#141517;--surface:#18191C;--well:#1E2023;--hair:#2A2C30;--hair-soft:#222427;
+  --ink:#EDEDEE;--ink-soft:#B9BBC0;--muted:#979AA2;--faint:#7E828A;
+  --accent:#A6CBB5;--wash:#212C26;--alarm:#E39595;--alarm-wash:#2D1F1F;--warn:#D8B782;--warn-wash:#2B251B;
+  --ok:#94C7A9;--ok-wash:#1E2A23;--on-ink:#141517;
+  --lift:0 0 0 1px #2A2C30;
+  --lift-hi:0 0 0 1px #34363B,0 16px 48px rgba(0,0,0,.5);
+  --x-c1:#9BC4AD;--x-c2:#8997AA;--x-c3:#C3B595;--x-c4:#B8A4AC;--x-c5:#BE9690;--x-c6:#91AAA9;
+  color-scheme:dark}}
+html:root[data-gamme="exploitation"][data-theme="dark"]{
+  --paper:#141517;--surface:#18191C;--well:#1E2023;--hair:#2A2C30;--hair-soft:#222427;
+  --ink:#EDEDEE;--ink-soft:#B9BBC0;--muted:#979AA2;--faint:#7E828A;
+  --accent:#A6CBB5;--wash:#212C26;--alarm:#E39595;--alarm-wash:#2D1F1F;--warn:#D8B782;--warn-wash:#2B251B;
+  --ok:#94C7A9;--ok-wash:#1E2A23;--on-ink:#141517;
+  --lift:0 0 0 1px #2A2C30;
+  --lift-hi:0 0 0 1px #34363B,0 16px 48px rgba(0,0,0,.5);
+  --x-c1:#9BC4AD;--x-c2:#8997AA;--x-c3:#C3B595;--x-c4:#B8A4AC;--x-c5:#BE9690;--x-c6:#91AAA9;
+  color-scheme:dark}
+
+/* Composants de la gamme Exploitation : rail sur le fond, onglets soulignés,
+   bandeau d'indicateurs à filets, cartes bordées d'un trait, rien qui flotte. */
+html[data-gamme="exploitation"] body{font-size:13px;--g1:var(--x-c1);--g2:var(--x-c2);--g3:var(--x-c3);--g4:var(--x-c4);--g5:var(--x-c5);--g6:var(--x-c6)}
+html[data-gamme="exploitation"] h1,html[data-gamme="exploitation"] h2,html[data-gamme="exploitation"] h3{font-weight:540}
+html[data-gamme="exploitation"] .rail{background:var(--paper);border-right:1px solid var(--hair);padding:22px 12px 14px}
+html[data-gamme="exploitation"] .mark{margin-bottom:28px}
+html[data-gamme="exploitation"] .mark .g{border-radius:5px;box-shadow:none}
+html[data-gamme="exploitation"] .mark b{font-size:17px;font-weight:550;letter-spacing:-.04em}
+html[data-gamme="exploitation"] .grp>span{text-transform:none;letter-spacing:0;font-size:11px;color:var(--faint)}
+html[data-gamme="exploitation"] .nav{position:relative;padding:8px 12px;border-radius:5px;font-size:12.5px;gap:10px}
+html[data-gamme="exploitation"] .nav:hover{background:var(--well)}
+html[data-gamme="exploitation"] .nav.on{background:var(--well);box-shadow:none;color:var(--ink);font-weight:450}
+html[data-gamme="exploitation"] .nav.on::before{content:"";position:absolute;left:0;top:50%;width:2px;height:14px;margin-top:-7px;border-radius:1px;background:var(--ink-soft)}
+html[data-gamme="exploitation"] .nav.on svg{color:var(--ink)}
+html[data-gamme="exploitation"] .nav .cnt{font-size:10px;color:var(--ink-soft);background:var(--well);border-radius:3px;padding:0 5px}
+html[data-gamme="exploitation"] .railcard{background:none;box-shadow:none;border-top:1px solid var(--hair);border-radius:0;padding:14px 4px 0}
+html[data-gamme="exploitation"] .top{border-bottom:1px solid var(--hair);padding-bottom:14px}
+html[data-gamme="exploitation"] .title{font-size:26px;letter-spacing:-.03em;font-weight:540}
+html[data-gamme="exploitation"] .lede{font-size:12.5px}
+html[data-gamme="exploitation"] .btn{border-radius:5px;box-shadow:0 0 0 1px var(--hair);background:var(--surface);font-weight:450;font-size:12.5px}
+html[data-gamme="exploitation"] .btn:hover{transform:none;box-shadow:0 0 0 1px var(--faint)}
+html[data-gamme="exploitation"] .btn.solid{background:var(--ink);color:var(--paper);box-shadow:none}
+html[data-gamme="exploitation"] .btn.flat{box-shadow:none;background:none}
+html[data-gamme="exploitation"] .views{background:none;box-shadow:none;border-radius:0;border-bottom:1px solid var(--hair);padding:0;gap:22px}
+html[data-gamme="exploitation"] .view{padding:9px 0;border-radius:0;border-bottom:2px solid transparent;margin-bottom:-1px}
+html[data-gamme="exploitation"] .view.on{background:none;color:var(--ink);border-bottom-color:var(--ink)}
+html[data-gamme="exploitation"] .figs{gap:0;padding-bottom:22px;margin-bottom:24px;border-bottom:1px solid var(--hair)}
+html[data-gamme="exploitation"] .fig{background:none;box-shadow:none;border-radius:0;border-right:1px solid var(--hair);padding:0 22px}
+html[data-gamme="exploitation"] .fig:hover{box-shadow:none;transform:none}
+html[data-gamme="exploitation"] .fig:first-child{padding-left:0}
+html[data-gamme="exploitation"] .fig:last-child{border-right:0}
+html[data-gamme="exploitation"] .fig .tile{display:none}
+html[data-gamme="exploitation"] .fig>span{text-transform:none;letter-spacing:0;font-size:11.5px;color:var(--muted)}
+html[data-gamme="exploitation"] .fig strong{font-size:30px;font-weight:500;letter-spacing:-.045em;margin-top:10px}
+html[data-gamme="exploitation"] .fig .delta{font-family:var(--sans);font-size:11px}
+html[data-gamme="exploitation"] .card{border-radius:7px;box-shadow:0 0 0 1px var(--hair)}
+html[data-gamme="exploitation"] .card>header h2{font-size:13px;font-weight:550}
+html[data-gamme="exploitation"] th{font-size:10px;letter-spacing:.06em;color:var(--muted);border-bottom-color:var(--hair)}
+html[data-gamme="exploitation"] td{font-size:12.5px;border-bottom-color:var(--hair-soft)}
+html[data-gamme="exploitation"] .tag{font-size:12px}
+html[data-gamme="exploitation"] .itile,html[data-gamme="exploitation"] .tile{border-radius:5px}
+html[data-gamme="exploitation"] .field{border-radius:5px}
+html[data-gamme="exploitation"] .dialogue{border-radius:8px}
+html[data-gamme="exploitation"] .toast{border-radius:6px}
+@container stage (max-width:720px){
+  html[data-gamme="exploitation"] .figs{row-gap:22px}
+  html[data-gamme="exploitation"] .fig:nth-child(2n){border-right:0}
+  html[data-gamme="exploitation"] .fig:nth-child(2n+1){padding-left:0}
+}
+@container stage (max-width:520px){
+  html[data-gamme="exploitation"] .fig{padding:0 14px}
+  html[data-gamme="exploitation"] .fig strong{font-size:24px}
+}
