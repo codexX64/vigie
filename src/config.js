@@ -16,6 +16,10 @@ export function lireConfigVigie(env = process.env) {
   return lireConfig({
     port: { env: 'PORT', type: 'entier', min: 0, max: 65535, defaut: 8170 },
     hote: { env: 'HOTE', type: 'chaine', defaut: '0.0.0.0' },
+    // Récepteur syslog du bouclier (UDP et TCP) dans le conteneur, et le port
+    // publié sur la machine, celui à donner à la passerelle. 0 : pas de récepteur.
+    syslogPort: { env: 'VIGIE_SYSLOG_PORT', type: 'entier', min: 0, max: 65535, defaut: 5514 },
+    syslogPortHote: { env: 'VIGIE_SYSLOG_PORT_HOTE', type: 'entier', min: 0, max: 65535, defaut: 0 },
     donnees: { env: 'DATA_DIR', type: 'chaine', defaut: '/data' },
     // Jeton du Hub : actions, sondes et déclencheurs. Il sert aussi à vérifier
     // les jetons dérivés que le Hub donne aux services voisins (MapMyLAN).
