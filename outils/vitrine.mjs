@@ -7,6 +7,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { demarrer } from '../src/main.js';
 import { fauxServices, fausseSonde, JETON_DOCKER } from '../test/faux.js';
+import { lireLigne } from '../src/bouclier/journaux.js';
+import { FLUX } from '../src/bouclier/menaces.js';
 
 const port = Number(process.argv[2] || 8197);
 const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'vigie-vitrine-'));
@@ -14,12 +16,21 @@ const faux = fauxServices();
 await new Promise(r => faux.serveur.listen(0, '127.0.0.1', r));
 const ext = `http://127.0.0.1:${faux.serveur.address().port}`;
 const jeton = 'jeton-installation-de-la-vitrine-vigie';
+// Listes de menaces de démonstration : rien ne part vers Internet.
+const fauxFlux = url => {
+  if (url === FLUX.feodo.url) return new Response('185.220.101.7\n45.137.21.9\n');
+  if (url === FLUX['spamhaus-drop'].url) return new Response('{"cidr":"45.155.205.0/24"}\n{"cidr":"91.240.118.0/24"}\n');
+  if (url === FLUX['blocklist-de'].url) return new Response('80.94.95.0\n141.98.11.4\n');
+  if (url === FLUX.urlhaus.url) return new Response('127.0.0.1 cdn-maj.exemple-malveillant.net\n');
+  return new Response('', { status: 503 });
+};
 const vigie = await demarrer({
   DATA_DIR: path.join(dossier, 'data'), PORT: String(port), HOTE: '127.0.0.1', SOCLE_JETON_INSTALLATION: jeton, VIGIE_HUB_TOKEN: 'jeton-du-hub-de-la-vitrine-0123456789',
   MAPMYLAN_URL: ext + '/mml', MAPMYLAN_JETON: faux.jetons.mml, NEXARC_URL: ext + '/nxr', NEXARC_JETON: faux.jetons.nxr, DOCKER_CONTROL_URL: ext + '/dck',
   IA_LOCALE_URL: ext + '/ollama', IA_LOCALE_MODELE: 'qwen3:8b', SYNAPSE_URL: ext + '/syn', SYNAPSE_JETON: faux.jetons.syn,
+  VIGIE_SYSLOG_PORT: '0', VIGIE_SYSLOG_PORT_HOTE: '5514',
   ...(process.env.SOCLE_THEME ? { SOCLE_THEME: process.env.SOCLE_THEME } : {}),
-}, { log: { info() {}, warn() {}, error() {} }, sonde: fausseSonde });
+}, { log: { info() {}, warn() {}, error() {} }, sonde: fausseSonde, fetchMenaces: async url => fauxFlux(url) });
 const fin = async x => { await vigie.moteur.enCours?.travail; return x; };
 vigie.magasin.poserSecret('docker', 'jeton', JETON_DOCKER);
 // Un premier audit plus propre, pour la courbe : la caméra n'avait pas encore Telnet.
@@ -37,4 +48,24 @@ faux.etat.actionPrend = false;
 await vigie.moteur.executer({ type: 'quarantine', appareil: 'camera', motif: 'Telnet ouvert', auteur: 'ana' });
 faux.etat.actionPrend = true;
 await vigie.moteur.executer({ type: 'quarantine', appareil: 'intrus', motif: 'Signe d’intrusion', auteur: 'vigie', automatique: true });
+// Le bouclier : journaux d'une passerelle UniFi de démonstration, une passerelle qui répond.
+const b = vigie.bouclier;
+await b.menaces.actualiser({ forcer: true });
+const udm = l => { const o = lireLigne(l, 'syslog:192.0.2.1'); if (o) { b.recepteur.stats.recues++; b.recepteur.stats.lues++; b.recepteur.stats.derniere = Date.now(); b.recepteur.stats.parEmetteur['192.0.2.1'] = Date.now(); b.correlateur.observer(o); } };
+const cef = (nom, ext) => `<132>Oct 13 10:00:00 passerelle CEF:0|Ubiquiti|UniFi Network|9.4.19|544|${nom}|7|${ext}`;
+udm(cef('Threat Detected and Blocked', 'src=45.155.205.10 spt=51111 dst=10.9.10.20 dpt=22 proto=TCP UNIFIcategory=Security UNIFIsubCategory=Intrusion Prevention UNIFIipsSignature=ET SCAN Potential SSH Scan OUTBOUND UNIFIipsSignatureId=2003068 UNIFIrisk=high'));
+udm(cef('Threat Detected and Blocked', 'src=193.32.162.8 spt=40111 dst=10.9.10.30 dpt=445 proto=TCP UNIFIcategory=Security UNIFIipsSignature=ET EXPLOIT Possible ETERNALBLUE Probe MS17-010 UNIFIipsSignatureId=2024218 UNIFIrisk=medium'));
+udm(cef('Threat Detected', 'src=193.32.162.8 spt=40112 dst=10.9.10.30 dpt=3389 proto=TCP UNIFIcategory=Security UNIFIipsSignature=ET SCAN MS Terminal Server Traffic on Non-standard Port UNIFIipsSignatureId=2023753 UNIFIrisk=low'));
+udm(cef('Honeypot Triggered', 'UNIFIcategory=Security UNIFIsubCategory=Honeypot src=10.9.10.77 dst=10.9.10.2 dpt=23 msg=Honeypot accessed'));
+for (let p = 1000; p < 1016; p++) udm(`<4>Oct 13 10:00:01 passerelle kernel: [WAN_IN-D-2147483647] IN=eth8 OUT= SRC=141.98.11.4 DST=203.0.113.5 LEN=60 PROTO=TCP SPT=40000 DPT=${p} SYN`);
+for (let i = 0; i < 6; i++) udm(`<4>Oct 13 10:00:02 passerelle kernel: [WAN_IN-D-2147483647] IN=eth8 OUT= SRC=80.94.95.12 DST=203.0.113.5 LEN=60 PROTO=TCP SPT=40000 DPT=22 SYN`);
+b.correlateur.observer({ type: 'flux', src: '10.9.10.50', dst: '185.220.101.7', dport: 443, capteur: 'syslog:192.0.2.1' });
+await new Promise(r => setTimeout(r, 50));
+await b.riposte.bloquer({ ip: '2a01:4f8:c0c:1234::7', minutes: 1440, motif: 'balayage IPv6 vu dans les journaux du NAS', raisons: ['balayage IPv6 vu dans les journaux du NAS'], auteur: 'ana' });
+const ancien = await b.riposte.bloquer({ ip: '103.145.13.20', minutes: 60, motif: 'force brute : 24 tentatives sur le port 22', raisons: ['force brute : 24 tentatives sur le port 22'], auteur: 'vigie', automatique: true });
+await b.riposte.lever(ancien.id, 'ana');
+vigie.magasin.poserReglage('bouclier', { unifiHote: '192.0.2.1', unifiFp: 'sha256:' + '3f'.repeat(32), emetteurs: ['192.0.2.1'] });
+vigie.magasin.poserSecret('bouclier', 'cleUnifi', 'cle-de-demonstration-0123456789');
+b.riposte.unifiFabrique = () => ({ forme: 'chaines', synchroniser: async l => ({ 4: { id: 'tml1', n: l.length }, 6: { id: 'tml2', n: 0 } }), regles: async () => ({ total: 14, entrant: true, sortant: true, regles: [{ nom: 'VIGIE entrée', actif: true }, { nom: 'VIGIE sortie', actif: true }] }) });
+await b.riposte.synchroniser({ forcer: true });
 console.log(`VIGIE de démonstration sur http://localhost:${port} — jeton d’installation : ${jeton}`);

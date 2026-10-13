@@ -110,3 +110,17 @@ details>summary{cursor:pointer;color:var(--muted);font-size:13px;margin-top:4px}
   .score-carte{justify-content:center}
   .anneau{width:132px;height:132px}
 }
+
+/* Bouclier */
+.mb12{margin-bottom:12px}
+.ip{font-family:var(--mono);font-size:13px;font-weight:500;overflow-wrap:anywhere}
+.menace-barre{height:4px;margin:6px 0 4px;max-width:240px}
+.deux{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.etapes{padding-left:18px;display:grid;gap:6px;margin:10px 0 0;font-size:12.5px;color:var(--ink-soft)}
+.etapes li{overflow-wrap:anywhere}
+.etat-unifi{display:grid;gap:3px;padding:8px 10px;border-radius:8px;background:var(--well);margin-bottom:6px}
+.etat-unifi small{font-size:12px;color:var(--ink-soft);overflow-wrap:anywhere}
+.erreur-texte{color:var(--alarm)!important}
+.flowrow small+small{margin-top:1px}
+@media (max-width:560px){.deux{grid-template-columns:minmax(0,1fr)}}
+.grow1>.tag{margin:3px 0 1px}

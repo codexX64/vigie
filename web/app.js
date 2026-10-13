@@ -8,6 +8,7 @@ import {
   Api, porte, pageSecurite, pageComptes, h, icone, basculeTheme, appliquerTheme,
   toast, confirmer, dialogue, feuille, ajouterPictos,
 } from '/socle/compte.js';
+import { pageBouclier } from './bouclier.js';
 
 appliquerTheme();
 const SERVICE = 'VIGIE';
@@ -28,6 +29,7 @@ ajouterPictos({
   jouer: '<path d="M7 5v14l11-7z"/>',
   actions: '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
   courbe: '<path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/>',
+  muraille: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M3 15h18M9 5v5M15 10v5M9 15v4"/>',
   puce: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
 });
 
@@ -51,6 +53,7 @@ const PAGES = {
   tableau: { titre: 'Tableau de bord', ic: 'bouclier', rendre: pageTableau },
   constats: { titre: 'Constats', ic: 'liste', rendre: pageConstats },
   historique: { titre: 'Historique', ic: 'courbe', rendre: pageHistorique },
+  bouclier: { titre: 'Bouclier', ic: 'muraille', rendre: () => pageBouclier({ api, admin, sur, quand, interrupteur, suivre, recharger: () => aller('bouclier') }) },
   evenements: { titre: 'Événements', ic: 'cloche', rendre: pageEvenements },
   actions: { titre: 'Actions', ic: 'eclair', rendre: pageActions },
   ...(admin ? { reglages: { titre: 'Réglages', ic: 'reglages', rendre: pageReglages } } : {}),
@@ -65,7 +68,7 @@ const app = h('div', { class: 'app' },
   h('nav', { class: 'rail', 'aria-label': 'Navigation' },
     h('div', { class: 'mark' }, h('div', { class: 'g' }, icone('bouclier', 15)), h('b', { text: SERVICE }), h('i', { class: 'pulse' })),
     groupe('Audit', ['tableau', 'constats', 'historique']),
-    groupe('Veille', ['evenements', 'actions']),
+    groupe('Veille', ['bouclier', 'evenements', 'actions']),
     groupe('Système', ['reglages', 'securite', 'comptes']),
     h('div', { class: 'railcard' },
       h('div', { class: 'row' }, icone('bouclier', 14), h('span', { class: 'tronque', text: 'Score' }), railScore),
@@ -81,10 +84,18 @@ const app = h('div', { class: 'app' },
 document.body.append(app);
 
 let minuteur = null;
+let generation = 0;
+// Une page qui se repeint seule : la boucle s'arrête dès qu'on en change.
+function suivre(peindre, ms) {
+  const g = generation;
+  const tour = () => { minuteur = setTimeout(async () => { if (g !== generation) return; try { await peindre(); } catch { /* déconnecté : la porte s'en charge */ } if (g === generation) tour(); }, ms); };
+  tour();
+}
 async function aller(cible) {
   const [k0, requete = ''] = cible.split('?');
   const k = PAGES[k0] ? k0 : 'tableau';
   clearTimeout(minuteur);
+  generation++;
   for (const [n, b] of Object.entries(navs)) b.classList.toggle('on', n === k);
   app.classList.remove('menu-ouvert');
   history.replaceState(null, '', '#' + k + (requete ? '?' + requete : ''));
