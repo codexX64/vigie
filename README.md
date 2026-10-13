@@ -27,6 +27,14 @@ ni le score.
   choisis, jamais l'infrastructure, et s'arrête au plafond horaire. Toute
   action passe par MapMyLAN, dans les plages qu'il déclare : instantané,
   vérification, retour arrière si elle n'a pas pris, annulation possible.
+- **Bouclier.** VIGIE lit les journaux de la passerelle UniFi (alertes de
+  l'IPS — le Suricata intégré à la passerelle UniFi —, pot de miel, refus du pare-feu),
+  les croise avec des listes de menaces publiques (abuse.ch, Spamhaus,
+  Emerging Threats, CINS, blocklist.de) et note chaque adresse. Au seuil,
+  une adresse extérieure est bloquée seule à la frontière, par l'API
+  officielle d'UniFi ; une machine du réseau qui se comporte comme une
+  machine compromise est signalée (et isolée seulement par la réaction
+  rapide). Détail plus bas.
 - **Rapport PDF** horodaté en un clic, écrit côté serveur sans dépendance.
 - **Diffusion.** Déclencheurs pour les workflows du Hub, billetterie au
   format ticket/v1 (Aselia), Telegram, et SYNAPSE pour la mémoire des audits.
@@ -43,6 +51,49 @@ se pose dans VIGIE → Réglages.
 
 Seule, sans le Hub : `docker compose up -d --build` avec un `.env` (voir
 `docker-compose.yml`).
+
+## Bouclier
+
+VIGIE ne réécrit pas un moteur d'inspection de paquets : il pilote ceux qui
+existent. Sur un réseau UniFi, c'est la passerelle UniFi qui inspecte (IPS Suricata,
+pot de miel, pare-feu) ; VIGIE lit ce qu'elle voit, décide, et lui rend des
+listes d'adresses à refuser. Rien n'est à installer ailleurs.
+
+**Ce qu'il lit.** Un récepteur syslog (UDP et TCP, port 5514 par défaut,
+`SYSLOG_PORT` dans le Hub) : CEF d'UniFi Network (Activity Logging → SIEM
+Server), lignes du pare-feu (CyberSecure → Traffic Logging), et EVE JSON de
+Suricata si une sonde existe ailleurs. Seuls les émetteurs déclarés sont lus
+— un journal se falsifie, et VIGIE agit sur ce qu'il lit.
+
+**Comment il note** (idées de Suricata, sshguard, psad et CrowdSec, pas leur
+code). Chaque observation ajoute des points à l'adresse qui la porte, avec sa
+raison : alerte de l'IPS de gravité 1 = 100, 2 = 40, 3 = 10 ; balayage de
+ports ou d'adresses, force brute sur un port d'authentification = 60 dans une
+fenêtre de dix minutes ; présence sur une liste de menaces = son poids. Le
+score s'efface de moitié chaque heure. Les listes ne bloquent rien seules :
+elles pèsent sur une adresse vue en train d'agir. Une machine du réseau
+monte quand elle touche le pot de miel, contacte un serveur de commande
+connu, déclenche une signature de compromission, balaie le réseau interne ou
+demande des noms générés par algorithme.
+
+**Ce qu'il fait.** Trois modes : observer, simulation (note ce qu'il aurait
+bloqué), actif (par défaut). En actif, une adresse extérieure au seuil est
+bloquée 1 h, puis 1 jour, 7 jours, 30 jours à chaque récidive ; plafond de
+blocages automatiques par heure. Jamais une adresse privée ou réservée, un
+résolveur DNS public, Cloudflare (le tunnel du Hub), ni la liste blanche.
+Chaque blocage se lève en un clic. Les blocages vont :
+
+- sur la passerelle UniFi, dans deux listes d'adresses (« VIGIE · bloquées IPv4 » et
+  « … IPv6 ») par l'API d'intégration d'UniFi Network 9 ou plus. La clé
+  d'API ne part qu'à une passerelle dont le certificat a l'empreinte
+  confirmée par l'administrateur. Deux règles du pare-feu, posées une fois
+  dans UniFi, refusent ces listes en entrée et en sortie ; VIGIE vérifie
+  qu'elles existent ;
+- dans une liste texte (`/api/bouclier/liste.txt`, jeton dédié) pour un autre
+  pare-feu qui lit une URL (pfSense, OPNsense, MikroTik).
+
+Mise en route : VIGIE → Bouclier, les trois cartes « Passerelle UniFi »,
+« Journaux de la passerelle » et « Liste blanche et émetteurs ».
 
 ## Règles
 

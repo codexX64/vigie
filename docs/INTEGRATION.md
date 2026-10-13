@@ -1,4 +1,4 @@
-# Intégration — VIGIE 1.0
+# Intégration — VIGIE 1.1
 
 ## Jetons
 
@@ -53,3 +53,22 @@ Types d'événements : `appareil.nouveau`, `port.nouveau`, `intrusion`,
 `reaction`, `reaction.retenue`, `alerte.reseau`, `alerte.parc`,
 `trafic.suspect`, `config.derive`, `source.panne`, `source.retour`,
 `constat`, `audit.termine`.
+
+## Bouclier
+
+| Entrée | Qui | Ce qu'elle fait |
+|---|---|---|
+| syslog UDP/TCP 5514 | la passerelle (émetteurs déclarés) | CEF d'UniFi, lignes du pare-feu, EVE JSON |
+| `GET /api/bouclier` | session, jeton du Hub, jeton dérivé | état : mode, menaces, blocages, alertes, passerelle, listes |
+| `POST /api/bouclier/bloquer` `{ ip, minutes?, motif? }` | administrateur, jeton du Hub | bloque une adresse publique hors liste blanche |
+| `POST /api/bouclier/blocages/:id/lever` | administrateur, jeton du Hub | lève un blocage |
+| `GET /api/bouclier/liste.txt?jeton=vgl_…` | pare-feu qui lit une URL | adresses bloquées, une par ligne |
+| `POST /api/sonde/eve` `{ evenements: [...] }` | sonde (jeton `vgs_…`) | EVE JSON de Suricata, 5 000 événements au plus |
+
+Réglages, passerelle, jetons de sonde et de liste : session d'administrateur
+sous renfort, jamais un jeton.
+
+Événements de veille : `bouclier.bloque` (faible), `bouclier.simule`,
+`bouclier.menace` (mode observation), `bouclier.interne` (critique),
+`bouclier.plafond` et `bouclier.passerelle` (élevé). Déclencheurs du Hub :
+« Adresse bloquée », « Machine du réseau suspecte ».
