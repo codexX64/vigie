@@ -12,6 +12,7 @@ import { Memoire } from './memoire.js';
 import { Diffusion } from './diffusion.js';
 import { Moteur } from './veille.js';
 import { creerApi } from './api.js';
+import { Bouclier } from './bouclier/index.js';
 import {
   Debit, ErreurHttp, demarrerSocle, entetesSecurite, envelopper, nonceCsp, politiqueContenu,
   repondreErreur, repondreJson, servirFichier, cheminVersionne,
@@ -35,7 +36,7 @@ function appliquerIaDuHub(cfg, magasin, log) {
   log.info?.(`[ia] réglage du Hub appliqué : ${cfg.iaMode}`);
 }
 
-export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = globalThis.fetch, sonde } = {}) {
+export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = globalThis.fetch, fetchMenaces = f, sonde } = {}) {
   const cfg = lireConfigVigie(env);
   const db = ouvrirBase(cfg.donnees);
   const socle = await demarrerSocle({ service: { id: 'vigie', nom: 'VIGIE', contactSecurite: CONTACT_SECURITE }, db, dossier: cfg.donnees, env, log });
@@ -47,8 +48,10 @@ export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = gl
   const memoire = new Memoire({ url: cfg.synapseUrl, jeton: cfg.synapseJeton, fetch: f });
   const diffusion = new Diffusion({ magasin, fetch: f, tgApi: cfg.tgApi, urlPublique: socle.cfg.urlPublique || '' });
   const moteur = new Moteur({ magasin, sources, ia, memoire, diffusion, journal: socle.journal, log });
-  const api = creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, diffusion });
+  const bouclier = new Bouclier({ cfg, db, magasin, moteur, sources, journal: socle.journal, fetch: fetchMenaces, log });
+  const api = creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, diffusion, bouclier });
   moteur.demarrer();
+  await bouclier.demarrer();
 
   const debit = new Debit({ max: 900 });
   const serveur = http.createServer(envelopper(async (req, res) => {
@@ -79,8 +82,9 @@ export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = gl
   log.info?.(`VIGIE ${VERSION} à l’écoute sur ${cfg.hote}:${serveur.address().port}`);
 
   return {
-    serveur, db, socle, magasin, moteur, sources, ia, memoire, diffusion, api, port: serveur.address().port,
+    serveur, db, socle, magasin, moteur, sources, ia, memoire, diffusion, api, bouclier, port: serveur.address().port,
     async arreter() {
+      bouclier.arreter();
       await moteur.arreter(); memoire.arreter(); socle.arreter();
       await new Promise(r => serveur.close(r));
       db.close();

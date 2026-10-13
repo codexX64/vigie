@@ -71,8 +71,18 @@ export const DEFAUTS = {
   // Billetterie (Aselia ou autre) au format ticket/v1, et Telegram : à partir de quelle gravité.
   billetterie: { url: '', cle: null, entete: 'X-Ticket-Key', marqueur: 'ticket', seuil: 'eleve' },
   telegram: { jeton: null, chat: '', seuil: 'eleve' },
+  // Le bouclier : capteurs, listes de menaces, corrélation, riposte (src/bouclier).
+  // mode : observer (signale), simulation (note ce qu'il aurait bloqué), actif
+  // (bloque seul les adresses extérieures au-delà du seuil).
+  bouclier: {
+    mode: 'actif', seuil: 100, seuilInterne: 100, demiVieMinutes: 60,
+    balayagePorts: 15, balayageCibles: 12, forceBrute: 20,
+    dureesMinutes: [60, 1440, 10080, 43200], autoParHeure: 100, maxUnifi: 1000,
+    listes: {}, listesPropres: [], listesHeures: 6, listeBlanche: [], emetteurs: [], sondes: [],
+    unifiHote: '', unifiPort: 443, unifiFp: '', cleUnifi: null, jetonListe: null,
+  },
 };
-const SCELLES = { ia: ['cle'], docker: ['jeton'], billetterie: ['cle'], telegram: ['jeton'] };
+const SCELLES = { ia: ['cle'], docker: ['jeton'], billetterie: ['cle'], telegram: ['jeton'], bouclier: ['cleUnifi', 'jetonListe'] };
 
 const json = (s, defaut) => { try { return s ? JSON.parse(s) : defaut; } catch { return defaut; } };
 

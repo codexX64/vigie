@@ -181,6 +181,14 @@ export class Sources {
 
   // ---- actions (par MapMyLAN) ----
   async appareil(id) { return this.mml(`/api/devices/${encodeURIComponent(id)}`); }
+  /** L'appareil de MapMyLAN qui porte une adresse (liste relue au plus une fois par minute). */
+  async appareilParIp(ip) {
+    if (!this.cacheAppareils || Date.now() - this.cacheAppareils.t > 60e3) {
+      const l = await this.mml('/api/devices');
+      this.cacheAppareils = { t: Date.now(), l: Array.isArray(l) ? l : [] };
+    }
+    return this.cacheAppareils.l.find(a => a.ip === ip) || null;
+  }
   async agir(type, id, motif = '') {
     const chemin = { quarantine: 'quarantine', ban: 'ban', unban: 'unban', 'deep-scan': 'deep-scan' }[type];
     if (!chemin) throw new ErreurSource('action inconnue');

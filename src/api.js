@@ -17,6 +17,10 @@ import { ErreurAction } from './veille.js';
 import { PRIVEES, plages } from './sources.js';
 import net from 'node:net';
 import { VERSION } from './config.js';
+import { MODES, LISTE_BLANCHE_DEFAUT } from './bouclier/riposte.js';
+import { observer, empreinteValide, empreinte } from './bouclier/tls.js';
+import { plage, normaliser } from './bouclier/ip.js';
+import { empreinteJeton } from './bouclier/index.js';
 
 const T = (max, o = {}) => ({ type: 'chaine', max, ...o });
 const B = { type: 'booleen' };
@@ -41,11 +45,25 @@ const S = {
   billetterie: { url: T(500, { motif: /^(https?:\/\/\S{3,490})?$/ }), cle: T(300, { motif: /^[\x21-\x7e]{8,300}$/ }), retirerCle: B, entete: T(40, { motif: /^[A-Za-z0-9-]{1,40}$/ }), marqueur: T(32, { motif: /^[a-z0-9_]{1,32}$/i }), seuil: T(10, { parmi: GRAVITES.slice(1) }) },
   telegram: { jeton: T(100, { motif: /^\d{5,15}:[A-Za-z0-9_-]{20,60}$/ }), retirerJeton: B, chat: T(20, { motif: /^(-?\d{1,20})?$/ }), seuil: T(10, { parmi: GRAVITES.slice(1) }) },
   essaiDiffusion: { canal: T(12, { requis: true, parmi: ['billetterie', 'telegram'] }) },
+  bouclier: {
+    mode: T(12, { parmi: MODES }), seuil: E(30, 1000), seuilInterne: E(30, 1000), demiVieMinutes: E(5, 1440),
+    balayagePorts: E(5, 1000), balayageCibles: E(3, 1000), forceBrute: E(3, 1000), autoParHeure: E(1, 2000), maxUnifi: E(10, 10000),
+    listesHeures: E(1, 168), listes: { type: 'objet', profondeur: 1 },
+    listeBlanche: { type: 'liste', max: 500, de: T(50) }, emetteurs: { type: 'liste', max: 50, de: T(50) },
+    listesPropres: { type: 'liste', max: 10, de: { type: 'objet', champs: { nom: T(60, { requis: true }), type: T(8, { requis: true, parmi: ['ip', 'domaine'] }), url: T(500, { requis: true, motif: /^https:\/\/\S{3,490}$/ }), poids: E(5, 100) } } },
+    dureesMinutes: { type: 'liste', max: 6, de: E(5, 525600) },
+  },
+  bloquer: { ip: T(50, { requis: true }), minutes: E(5, 525600), motif: T(200) },
+  unifiSonde: { hote: T(253, { requis: true, motif: /^[A-Za-z0-9.:-]{1,253}$/ }), port: E(1, 65535) },
+  unifi: { hote: T(253, { motif: /^[A-Za-z0-9.:-]{1,253}$/ }), port: E(1, 65535), fp: T(80), cle: T(200, { motif: /^[\x21-\x7e]{16,200}$/ }), retirer: B },
+  sonde: { nom: T(40, { requis: true, motif: /^[a-z0-9][a-z0-9-]{0,39}$/ }) },
+  eve: { evenements: { type: 'liste', max: 5000, de: { type: 'json', profondeur: 6 } } },
 };
 const Q = {
   audits: { limite: E(1, 200), statut: T(10, { parmi: ['termine', 'echec', 'en cours'] }) },
   evenements: { limite: E(1, 500), depuis: E(0, 8.64e15), type: T(30, { motif: /^[a-z.]{1,30}$/ }), min: T(10, { parmi: GRAVITES }) },
   constats: { appareil: T(64, { requis: true, motif: ID_APPAREIL }) },
+  liste: { jeton: T(80) },
 };
 
 /** Le nom d'un jeton dérivé valide (cer_<nom>_<hmac>), ou null. Comparaison à temps constant. */
@@ -75,7 +93,7 @@ export function urlBilletterieSure(brute) {
   return net.isIPv4(hote) && LOCALES.check(hote, 'ipv4');
 }
 
-export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, diffusion }) {
+export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, diffusion, bouclier }) {
   const r = new Routeur();
   const { portail, journal, limiteur } = socle;
 
@@ -229,6 +247,8 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     docker: { ...magasin.reglagePublic('docker'), url: cfg.dockerUrl || null }, perimetre: { ...magasin.reglage('perimetre'), plages: sources.perimetreCourant.plages },
     billetterie: { ...magasin.reglagePublic('billetterie'), etat: diffusion.etat.billetterie }, telegram: { ...magasin.reglagePublic('telegram'), etat: diffusion.etat.telegram },
     sources: sources.public(), memoire: memoire.public(),
+    // Les sondes : leur nom et leur date, jamais l'empreinte de leur jeton.
+    bouclier: { ...magasin.reglagePublic('bouclier'), sondes: (magasin.reglage('bouclier').sondes || []).map(({ nom, cree }) => ({ nom, cree })), listeBlancheDefaut: LISTE_BLANCHE_DEFAUT },
   });
   const admin = (ctx, renfort = false) => { if (appelant(ctx)) throw new ErreurHttp(403, 'Réservé à une session de VIGIE.'); return portail.exiger(ctx, { role: 'admin', renfort }); };
 
@@ -318,6 +338,119 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     if (!out.ok) throw new ErreurHttp(502, out.erreur);
     return out;
   });
+
+  // ---- bouclier ----
+  const vueBouclier = () => bouclier.etat();
+  r.get('/api/bouclier', ctx => { acces(ctx, LECTURE); return vueBouclier(); });
+  r.put('/api/reglages/bouclier', async ctx => {
+    // Changer ce que VIGIE bloque seul, ce qu'il ne bloque jamais ou qui il écoute : renfort exigé.
+    const s = admin(ctx, true);
+    const b = await corps(ctx, S.bouclier);
+    for (const x of [...(b.listeBlanche || []), ...(b.emetteurs || [])]) if (!plage(x)) throw new ErreurHttp(400, `Adresse ou plage invalide : ${x}.`);
+    if (b.listes) for (const [k, v] of Object.entries(b.listes)) if (!/^[a-z0-9-]{2,40}$/.test(k) || typeof v !== 'boolean') throw new ErreurHttp(400, 'Champ « listes » : identifiant et vrai/faux attendus.');
+    magasin.poserReglage('bouclier', b);
+    journal.ecrire({ acteur: s.compte, action: 'reglages.bouclier', objet: 'bouclier', ip: ctx.ip, details: { ...b } });
+    if (b.listes || b.listesPropres) bouclier.menaces.actualiser().catch(() => null);
+    return vueBouclier();
+  });
+  r.post('/api/bouclier/bloquer', async ctx => {
+    const qui = acces(ctx, { role: 'admin', jetons: ['hub'] });
+    const b = await corps(ctx, S.bloquer);
+    try {
+      const x = await bouclier.riposte.bloquer({ ip: b.ip, minutes: b.minutes ?? null, motif: b.motif || 'blocage manuel', raisons: [b.motif || 'blocage manuel'], auteur: qui.nom });
+      tracer(ctx, qui, 'bouclier.bloque', x.ip, { minutes: b.minutes ?? null });
+      return x;
+    } catch (e) { throw new ErreurHttp(e.status || 400, e.message); }
+  });
+  r.post('/api/bouclier/blocages/:id/lever', async ctx => {
+    const qui = acces(ctx, { role: 'admin', jetons: ['hub'] });
+    await corps(ctx, S.vide);
+    try { return await bouclier.riposte.lever(ctx.params.id, qui.nom); } catch (e) { throw new ErreurHttp(e.status || 400, e.message); }
+  });
+  r.post('/api/bouclier/listes/actualiser', async ctx => {
+    admin(ctx);
+    await corps(ctx, S.vide);
+    const faits = await bouclier.menaces.actualiser({ forcer: true });
+    return { faits, listes: bouclier.menaces.public() };
+  });
+  // La passerelle : lire son certificat (renfort), puis enregistrer adresse, empreinte et clé.
+  r.post('/api/bouclier/unifi/sonde', async ctx => {
+    admin(ctx, true);
+    const b = await corps(ctx, S.unifiSonde);
+    try { return await observer(b.hote, b.port || 443); } catch (e) { throw new ErreurHttp(502, `Passerelle injoignable : ${e.message}.`); }
+  });
+  r.put('/api/bouclier/unifi', async ctx => {
+    const s = admin(ctx, true);
+    const b = await corps(ctx, S.unifi);
+    if (b.retirer) {
+      magasin.poserReglage('bouclier', { unifiHote: '', unifiFp: '' });
+      magasin.poserSecret('bouclier', 'cleUnifi', null);
+    } else {
+      if (!b.hote) throw new ErreurHttp(400, 'Champ « hote » : obligatoire.');
+      if (b.fp && !empreinteValide(b.fp)) throw new ErreurHttp(400, 'Empreinte SHA-256 invalide.');
+      magasin.poserReglage('bouclier', { unifiHote: b.hote, unifiPort: b.port || 443, unifiFp: b.fp ? empreinte(b.fp) : '' });
+      if (b.cle) magasin.poserSecret('bouclier', 'cleUnifi', b.cle);
+    }
+    journal.ecrire({ acteur: s.compte, action: 'reglages.bouclier.unifi', objet: b.hote || 'unifi', ip: ctx.ip, details: { cle: !!b.cle, fp: !!b.fp, retirer: !!b.retirer } });
+    if (!b.retirer) await bouclier.riposte.synchroniser({ forcer: true });
+    return vueBouclier();
+  });
+  r.post('/api/bouclier/unifi/synchroniser', async ctx => {
+    admin(ctx);
+    await corps(ctx, S.vide);
+    return bouclier.riposte.synchroniser({ forcer: true });
+  });
+  // Les sondes Suricata : un jeton par sonde, montré une fois, gardé par son empreinte.
+  r.post('/api/bouclier/sondes', async ctx => {
+    const s = admin(ctx, true);
+    const b = await corps(ctx, S.sonde);
+    const sondes = (magasin.reglage('bouclier').sondes || []).filter(x => x.nom !== b.nom);
+    const jeton = `vgs_${crypto.randomBytes(33).toString('base64url')}`;
+    magasin.poserReglage('bouclier', { sondes: [...sondes, { nom: b.nom, empreinte: empreinteJeton(jeton), cree: Date.now() }].slice(-20) });
+    journal.ecrire({ acteur: s.compte, action: 'bouclier.sonde.jeton', objet: b.nom, ip: ctx.ip });
+    return { nom: b.nom, jeton };
+  });
+  r.post('/api/bouclier/sondes/retirer', async ctx => {
+    const s = admin(ctx, true);
+    const b = await corps(ctx, S.sonde);
+    magasin.poserReglage('bouclier', { sondes: (magasin.reglage('bouclier').sondes || []).filter(x => x.nom !== b.nom) });
+    journal.ecrire({ acteur: s.compte, action: 'bouclier.sonde.retiree', objet: b.nom, ip: ctx.ip });
+    return vueBouclier();
+  });
+  // Ce qu'envoie une sonde : son propre jeton, jamais une session ni le jeton du Hub.
+  r.post('/api/sonde/eve', async ctx => {
+    const j = presente(ctx);
+    limiteur.controler(cleMachine(ctx));
+    const nom = bouclier.sondeDuJeton(j);
+    if (!nom) {
+      limiteur.echec(cleMachine(ctx));
+      journal.rare(`sonde:${ctx.ip}`, { action: 'connexion.sonde', objet: '/api/sonde/eve', ip: ctx.ip, resultat: 'refus' });
+      throw new ErreurHttp(401, 'Jeton de sonde invalide.');
+    }
+    const b = valider(await lireCorps(ctx.req, { limite: 4 * 1024 * 1024 }), S.eve);
+    return { lues: bouclier.recevoirEve(b.evenements || [], nom) };
+  }, { public: true });
+  // La liste des adresses bloquées, en texte, pour un pare-feu qui lit une URL :
+  // jeton dédié dans l'adresse (ces pare-feu n'envoient pas d'en-tête), ou jeton du Hub.
+  r.post('/api/bouclier/jeton-liste', async ctx => {
+    const s = admin(ctx, true);
+    await corps(ctx, S.vide);
+    const jeton = `vgl_${crypto.randomBytes(30).toString('base64url')}`;
+    magasin.poserSecret('bouclier', 'jetonListe', jeton);
+    journal.ecrire({ acteur: s.compte, action: 'bouclier.liste.jeton', objet: 'liste', ip: ctx.ip });
+    return { jeton, chemin: `/api/bouclier/liste.txt?jeton=${jeton}` };
+  });
+  r.get('/api/bouclier/liste.txt', ctx => {
+    const attendu = magasin.secret('bouclier', 'jetonListe');
+    const { jeton } = ctx.q;
+    if (jeton) {
+      limiteur.controler(cleMachine(ctx));
+      if (!attendu || !egal(jeton, attendu)) { limiteur.echec(cleMachine(ctx)); throw new ErreurHttp(401, 'Jeton invalide.'); }
+    } else acces(ctx, { role: 'lecture', jetons: ['hub'] });
+    const t = bouclier.riposte.texteListe();
+    ctx.res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'content-length': Buffer.byteLength(t) });
+    ctx.res.end(t);
+  }, { public: true, requete: Q.liste });
 
   return {
     async traiter(ctx) {
