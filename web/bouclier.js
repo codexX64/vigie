@@ -64,7 +64,8 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
     const maintenant = Date.now();
     const actifs = e.blocages.filter(b => ['actif', 'simule'].includes(b.etat) && (!b.fin || b.fin > maintenant));
     const bloquees = new Set(actifs.map(b => b.ip));
-    const recues = e.syslog.lues + e.sondes.reduce((a, s) => a + s.lues, 0);
+    const releve = e.passerelle?.releve || {};
+    const recues = e.syslog.lues + e.sondes.reduce((a, s) => a + s.lues, 0) + (releve.derniere ? 1 : 0);
     lede.textContent = `${MODES[e.mode]} · seuil ${e.seuil} · ${e.listes.filter(l => l.active && l.entrees).length} listes de menaces chargées`;
 
     const fig = (titre, valeur, detail, ic, chaud = false) => h('div', { class: 'fig' }, h('div', { class: `tile ${chaud ? 'warn' : ''}` }, icone(ic, 15)), h('span', { text: titre }), h('strong', { text: String(valeur) }), h('div', { class: 'delta', text: detail }));
@@ -75,10 +76,11 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
       fig('Machines suspectes', e.internes.filter(x => x.score >= x.seuil / 2).length, 'du réseau local', 'alerte', e.internes.some(x => x.score >= x.seuil)));
 
     const notes = [];
-    if (!recues) notes.push(['warn', 'Aucun journal reçu pour l’instant : la passerelle n’envoie encore rien à VIGIE. Voir « Journaux de la passerelle » plus bas.']);
+    if (!recues) notes.push(['warn', 'Rien reçu de la passerelle pour l’instant : ni journal, ni relève par MapMyLAN. Voir « Passerelle » et « Journaux de la passerelle » plus bas.']);
+    else if (releve.active && !e.syslog.lues) notes.push(['', 'Alertes de l’IPS relevées par MapMyLAN chaque minute. Pour voir aussi les refus du pare-feu et le pot de miel, envoie les journaux de la passerelle (carte « Journaux »).']);
     else if (e.syslog.derniere && maintenant - e.syslog.derniere > 30 * 60e3) notes.push(['warn', `Plus aucun journal de la passerelle depuis ${duree(maintenant - e.syslog.derniere)}.`]);
     if (e.syslog.lues && !e.syslog.emetteursDeclares) notes.push(['warn', 'Toute adresse privée peut envoyer des journaux à VIGIE, donc lui faire bloquer une adresse : déclare la passerelle UniFi dans « Liste blanche et émetteurs ».']);
-    if (!e.unifi.relie) notes.push(['', 'Passerelle UniFi non reliée : les blocages restent dans VIGIE et dans la liste exportée, rien n’est coupé à la frontière.']);
+    if (!e.unifi.relie) notes.push(['', 'Aucune passerelle reliée : les blocages restent dans VIGIE et dans la liste exportée, rien n’est coupé à la frontière. Relie le routeur dans MapMyLAN : VIGIE s’en servira seule.']);
     else if (e.unifi.ok === false) notes.push(['warn', `La passerelle ne reçoit plus les blocages : ${e.unifi.erreur}`]);
     else if (e.unifi.regles && !e.unifi.regles.erreur && (!e.unifi.regles.entrant || !e.unifi.regles.sortant)) notes.push(['warn', `Listes envoyées, mais ${!e.unifi.regles.entrant && !e.unifi.regles.sortant ? 'aucune règle du pare-feu ne les cite' : `la règle ${!e.unifi.regles.entrant ? 'd’entrée' : 'de sortie'} manque`} : elles ne bloquent rien tant que les règles ne sont pas posées (Passerelle UniFi, plus bas).`]);
     if (e.mode !== 'actif') notes.push(['', e.mode === 'observer' ? 'Mode observation : VIGIE signale, ne bloque rien.' : 'Mode simulation : VIGIE note ce qu’il aurait bloqué, rien ne part vers la passerelle.']);
@@ -189,6 +191,8 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
   function carteUnifi() {
     const r = reglages;
     const u = etat.unifi;
+    const p = etat.passerelle || {};
+    const parMml = u.relie && !u.directe;
     const hote = h('input', { class: 'field mono', value: r.unifiHote, placeholder: 'adresse IP de la passerelle UniFi', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Adresse de la passerelle' });
     const port = h('input', { class: 'field', type: 'number', min: 1, max: 65535, value: r.unifiPort || 443, 'aria-label': 'Port' });
     const cle = h('input', { class: 'field mono', type: 'password', placeholder: r.cleUnifi ? 'clé enregistrée — en coller une autre pour la remplacer' : 'clé d’API UniFi', autocomplete: 'off', 'aria-label': 'Clé d’API' });
@@ -202,35 +206,42 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
       fp.textContent = `Certificat à épingler : ${o.fp}`;
       toast('Certificat retenu : colle la clé d’API puis enregistre.');
     });
-    const etatTexte = !u.relie ? 'non reliée' : u.ok === false ? 'erreur' : u.ok ? 'synchronisée' : 'reliée';
+    const etatTexte = !u.relie ? 'non reliée' : u.ok === false ? 'erreur' : u.ok ? (parMml ? 'par MapMyLAN' : 'synchronisée') : 'reliée';
     const regles = u.regles && !u.regles.erreur ? u.regles : null;
-    return h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Passerelle UniFi' }), h('span', { class: `note ${u.ok === false ? 'erreur' : ''}`, text: etatTexte })), h('div', { class: 'cardbody' },
-      h('p', { class: 'hint mt0', text: 'VIGIE tient deux listes d’adresses sur la passerelle UniFi (« VIGIE · bloquées IPv4 » et « … IPv6 ») par l’API officielle d’UniFi Network (9.0 ou plus). Il ne touche ni aux règles ni au reste de la configuration.' }),
-      u.relie ? h('div', { class: 'etat-unifi' },
-        h('small', { text: u.ok ? `${u.envoyees ?? 0} adresse${u.envoyees > 1 ? 's' : ''} envoyée${u.envoyees > 1 ? 's' : ''} · ${quand(u.synchro)}` : u.erreur || 'pas encore synchronisée' }),
-        regles ? h('small', { text: `Règles qui citent les listes : entrée ${regles.entrant ? 'oui' : 'NON'} · sortie ${regles.sortant ? 'oui' : 'NON'}${regles.regles?.length ? ` (${regles.regles.map(x => x.nom).join(', ')})` : ''}` }) : null) : null,
+    const nom4 = u.listes?.[4]?.nom || (parMml ? 'VIGIE bloquees IPv4' : 'VIGIE · bloquées IPv4');
+    const nom6 = u.listes?.[6]?.nom || (parMml ? 'VIGIE bloquees IPv6' : 'VIGIE · bloquées IPv6');
+    const voie = parMml
+      ? h('p', { class: 'hint mt0', text: `Reliée automatiquement par MapMyLAN : ${p.nom || 'routeur principal'} (${p.hote}). Rien à régler : les identifiants du routeur restent dans MapMyLAN, VIGIE y tient les groupes « ${nom4} » et « ${nom6} », et rien d’autre.` })
+      : u.directe ? h('p', { class: 'hint mt0', text: 'Reliée directement par l’API d’intégration d’UniFi Network (clé posée ici). Elle passe avant MapMyLAN.' })
+        : p.reliee ? h('p', { class: 'hint mt0', text: `Le routeur relié à MapMyLAN (${p.libelle || p.nom}) ne sait pas encore tenir une liste d’adresses : relie une passerelle UniFi directement ci-dessous.` })
+          : h('p', { class: 'hint mt0', text: `Aucune passerelle. Le plus simple : relier le routeur dans MapMyLAN (Équipement réseau) — VIGIE s’en sert alors seule, sans rien régler ici.${p.ancien ? ' (Ton MapMyLAN est trop ancien pour ça : mets-le à jour depuis le Hub.)' : ''}` });
+    const etatLigne = u.relie ? h('div', { class: 'etat-unifi' },
+      h('small', { text: u.ok ? `${u.envoyees ?? 0} adresse${u.envoyees > 1 ? 's' : ''} envoyée${u.envoyees > 1 ? 's' : ''} · ${quand(u.synchro)}` : u.erreur || 'pas encore synchronisée' }),
+      regles ? h('small', { text: `Règles qui citent les listes : entrée ${regles.entrant ? 'oui' : 'NON'} · sortie ${regles.sortant ? 'oui' : 'NON'}${regles.regles?.length ? ` (${regles.regles.map(x => x.nom).join(', ')})` : ''}` }) : null) : null;
+    const directe = h('details', { class: 'mt12', ...(u.directe ? { open: true } : {}) }, h('summary', { text: parMml ? 'Relier directement par une clé d’API (facultatif)' : 'Relier directement par une clé d’API UniFi' }),
       h('label', { class: 'lbl mt9', text: '1. Adresse et port de la passerelle' }), h('div', { class: 'deux' }, hote, port),
       h('div', { class: 'actions mt9' }, h('button', { class: 'btn sm', type: 'button', onclick: lire }, 'Lire son certificat')), fp,
       h('label', { class: 'lbl mt9', text: '2. Clé d’API — UniFi Network → Paramètres → Control Plane → Integrations → Create API Key' }), cle,
-      u.relie ? h('div', { class: 'actions mt12' },
-        h('button', { class: 'btn sm', type: 'button', onclick: sur(async () => { const o = await api.post('/api/bouclier/unifi/synchroniser', {}); toast(o.ok ? 'Passerelle synchronisée.' : o.erreur, !o.ok); await peindre(); }) }, 'Synchroniser'),
-        h('button', { class: 'btn sm', type: 'button', onclick: sur(async () => {
-          if (!(await confirmer('Délier la passerelle ?', 'La clé est effacée de VIGIE. Les listes restent sur la passerelle UniFi telles quelles : vide-les ou supprime les règles là-bas si tu ne veux plus qu’elles bloquent.', { danger: true, oui: 'Délier' }))) return;
-          etat = await api.put('/api/bouclier/unifi', { retirer: true }); toast('Passerelle déliée.'); await recharger();
-        }) }, 'Délier')) : null,
-      h('div', { class: 'actions mt9' },
-        h('button', { class: 'btn solid', type: 'button', onclick: sur(async () => {
-          if (!empreinte) throw new Error('Lis d’abord le certificat de la passerelle.');
-          etat = await api.put('/api/bouclier/unifi', { hote: hote.value.trim(), port: Number(port.value) || 443, fp: empreinte, ...(cle.value.trim() ? { cle: cle.value.trim() } : {}) });
-          toast(etat.unifi.ok ? 'Passerelle reliée : listes créées.' : `Enregistrée, mais : ${etat.unifi.erreur || 'pas de réponse'}`, etat.unifi.ok === false);
-          await recharger();
-        }) }, 'Enregistrer')),
-      h('details', { class: 'mt12' }, h('summary', { text: '3. Les règles à poser une fois dans UniFi (sans elles, les listes ne bloquent rien)' }),
+      u.directe ? h('div', { class: 'actions mt12' }, h('button', { class: 'btn sm', type: 'button', onclick: sur(async () => {
+        if (!(await confirmer('Délier la passerelle ?', 'La clé est effacée de VIGIE. Les listes restent sur la passerelle telles quelles. Si MapMyLAN pilote le routeur, VIGIE repasse par lui.', { danger: true, oui: 'Délier' }))) return;
+        await api.put('/api/bouclier/unifi', { retirer: true }); toast('Passerelle déliée.'); await recharger();
+      }) }, 'Délier')) : null,
+      h('div', { class: 'actions mt9' }, h('button', { class: 'btn solid', type: 'button', onclick: sur(async () => {
+        if (!empreinte) throw new Error('Lis d’abord le certificat de la passerelle.');
+        etat = await api.put('/api/bouclier/unifi', { hote: hote.value.trim(), port: Number(port.value) || 443, fp: empreinte, ...(cle.value.trim() ? { cle: cle.value.trim() } : {}) });
+        toast(etat.unifi.ok ? 'Passerelle reliée : listes créées.' : `Enregistrée, mais : ${etat.unifi.erreur || 'pas de réponse'}`, etat.unifi.ok === false);
+        await recharger();
+      }) }, 'Enregistrer')));
+    return h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Passerelle' }), h('span', { class: `note ${u.ok === false ? 'erreur' : ''}`, text: etatTexte })), h('div', { class: 'cardbody' },
+      voie, etatLigne,
+      u.relie ? h('div', { class: 'actions mt9' }, h('button', { class: 'btn sm', type: 'button', onclick: sur(async () => { const o = await api.post('/api/bouclier/unifi/synchroniser', {}); toast(o.ok ? 'Passerelle synchronisée.' : o.erreur, !o.ok); await peindre(); }) }, 'Synchroniser')) : null,
+      directe,
+      h('details', { class: 'mt12', ...(regles && (!regles.entrant || !regles.sortant) ? { open: true } : {}) }, h('summary', { text: 'Les règles à poser une fois dans UniFi (sans elles, les listes ne bloquent rien)' }),
         h('ol', { class: 'etapes' },
           h('li', { text: 'Paramètres → Policy Engine (ou Firewall & Security selon la version) → Create Policy.' }),
-          h('li', { text: '« VIGIE entrée » : action Block, zone source External, source = la liste « VIGIE · bloquées IPv4 », destination : toutes les zones internes. Journalisation (Syslog) cochée.' }),
-          h('li', { text: '« VIGIE sortie » : action Block, zones sources internes, destination = la même liste, zone External. Une machine infectée ne joint plus son serveur de commande.' }),
-          h('li', { text: 'Les deux mêmes pour « VIGIE · bloquées IPv6 » si l’IPv6 est actif.' }),
+          h('li', { text: `« VIGIE entrée » : action Block, zone source External, source = le groupe d’adresses « ${nom4} », destination : toutes les zones internes. Journalisation (Syslog) cochée.` }),
+          h('li', { text: '« VIGIE sortie » : action Block, zones sources internes, destination = le même groupe, zone External. Une machine infectée ne joint plus son serveur de commande.' }),
+          h('li', { text: `Les deux mêmes pour « ${nom6} » si l’IPv6 est actif.` }),
           h('li', { text: 'Placer ces règles avant les règles d’autorisation, puis « Synchroniser » ici : VIGIE vérifie qu’elles existent.' })))));
   }
 
@@ -238,10 +249,11 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
     const s = etat.syslog;
     const emetteurs = Object.entries(s.parEmetteur || {});
     return h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Journaux de la passerelle' }), h('span', { class: `note ${!s.lues ? 'erreur' : ''}`, text: s.lues ? `dernier ${depuis(s.derniere)}` : 'rien reçu' })), h('div', { class: 'cardbody' },
-      h('p', { class: 'hint mt0', text: 'C’est par là que VIGIE voit : alertes de l’IPS (le Suricata intégré à la passerelle UniFi), pot de miel, refus du pare-feu.' }),
+      h('p', { class: 'hint mt0', text: 'Les journaux donnent tout : alertes de l’IPS (le Suricata intégré à la passerelle UniFi), pot de miel, refus du pare-feu. Si MapMyLAN pilote le routeur, les alertes de l’IPS arrivent déjà sans eux.' }),
       h('dl', { class: 'preuve' },
         h('dt', { text: 'Serveur' }), h('dd', { text: 'adresse IP locale de la machine de VIGIE' }),
         h('dt', { text: 'Port' }), h('dd', { text: `${s.port || '—'} (UDP ou TCP)` }),
+        ...(etat.passerelle?.ips ? [h('dt', { text: 'Relève IPS' }), h('dd', { text: etat.passerelle.releve.erreur ? `erreur : ${etat.passerelle.releve.erreur}` : etat.passerelle.releve.active ? `par MapMyLAN · ${etat.passerelle.releve.lues} alertes · ${depuis(etat.passerelle.releve.derniere)}` : 'en pause : les alertes arrivent déjà par syslog' })] : []),
         h('dt', { text: 'Reçues · lues' }), h('dd', { text: `${s.recues.toLocaleString('fr-FR')} · ${s.lues.toLocaleString('fr-FR')}` }),
         h('dt', { text: 'Refusées' }), h('dd', { text: `${s.refusees} (émetteur non déclaré)${s.dernierRefus ? ` · dernier : ${s.dernierRefus}` : ''}${s.debordees ? ` · ${s.debordees} au-delà de 3 000/s` : ''}` }),
         ...emetteurs.flatMap(([ip, t]) => [h('dt', { text: 'Émetteur' }), h('dd', { text: `${ip} · ${depuis(t)}` })])),

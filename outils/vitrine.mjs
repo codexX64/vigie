@@ -64,8 +64,12 @@ await new Promise(r => setTimeout(r, 50));
 await b.riposte.bloquer({ ip: '2a01:4f8:c0c:1234::7', minutes: 1440, motif: 'balayage IPv6 vu dans les journaux du NAS', raisons: ['balayage IPv6 vu dans les journaux du NAS'], auteur: 'ana' });
 const ancien = await b.riposte.bloquer({ ip: '103.145.13.20', minutes: 60, motif: 'force brute : 24 tentatives sur le port 22', raisons: ['force brute : 24 tentatives sur le port 22'], auteur: 'vigie', automatique: true });
 await b.riposte.lever(ancien.id, 'ana');
-vigie.magasin.poserReglage('bouclier', { unifiHote: '192.0.2.1', unifiFp: 'sha256:' + '3f'.repeat(32), emetteurs: ['192.0.2.1'] });
-vigie.magasin.poserSecret('bouclier', 'cleUnifi', 'cle-de-demonstration-0123456789');
-b.riposte.unifiFabrique = () => ({ forme: 'chaines', synchroniser: async l => ({ 4: { id: 'tml1', n: l.length }, 6: { id: 'tml2', n: 0 } }), regles: async () => ({ total: 14, entrant: true, sortant: true, regles: [{ nom: 'VIGIE entrée', actif: true }, { nom: 'VIGIE sortie', actif: true }] }) });
+// La passerelle que MapMyLAN pilote : reliée seule, sans clé dans VIGIE.
+vigie.magasin.poserReglage('bouclier', { emetteurs: ['192.0.2.1'] });
+b.passerelle = { reliee: true, nom: 'Passerelle', hote: '192.0.2.1', libelle: 'Ubiquiti · UniFi', bouclier: true, ips: true, lu: Date.now() };
+b.lirePasserelle = async () => b.passerelle;
+b.releverIps = async () => 0;
+b.releve = { ...b.releve, derniere: Date.now(), lues: 4 };
+b.riposte.passerelleAuto = () => ({ forme: 'mapmylan', nom: 'Passerelle', synchroniser: async l => ({ 4: { id: 'g4', nom: 'VIGIE bloquees IPv4', n: l.length }, 6: { id: 'g6', nom: 'VIGIE bloquees IPv6', n: 0 } }), regles: async () => ({ entrant: true, sortant: true, regles: [{ nom: 'VIGIE entree', actif: true }, { nom: 'VIGIE sortie', actif: true }] }) });
 await b.riposte.synchroniser({ forcer: true });
 console.log(`VIGIE de démonstration sur http://localhost:${port} — jeton d’installation : ${jeton}`);
