@@ -28,7 +28,7 @@ const vigie = await demarrer({
   DATA_DIR: path.join(dossier, 'data'), PORT: String(port), HOTE: '127.0.0.1', SOCLE_JETON_INSTALLATION: jeton, VIGIE_HUB_TOKEN: 'jeton-du-hub-de-la-vitrine-0123456789',
   MAPMYLAN_URL: ext + '/mml', MAPMYLAN_JETON: faux.jetons.mml, NEXARC_URL: ext + '/nxr', NEXARC_JETON: faux.jetons.nxr, DOCKER_CONTROL_URL: ext + '/dck',
   IA_LOCALE_URL: ext + '/ollama', IA_LOCALE_MODELE: 'qwen3:8b', SYNAPSE_URL: ext + '/syn', SYNAPSE_JETON: faux.jetons.syn,
-  VIGIE_SYSLOG_PORT: '0', VIGIE_SYSLOG_PORT_HOTE: '5514',
+  VIGIE_SYSLOG_PORT: '0', VIGIE_SYSLOG_PORT_HOTE: '5514', VIGIE_EXERCICE: '1',
   ...(process.env.SOCLE_THEME ? { SOCLE_THEME: process.env.SOCLE_THEME } : {}),
 }, { log: { info() {}, warn() {}, error() {} }, sonde: fausseSonde, fetchMenaces: async url => fauxFlux(url) });
 const fin = async x => { await vigie.moteur.enCours?.travail; return x; };

@@ -124,3 +124,11 @@ details>summary{cursor:pointer;color:var(--muted);font-size:13px;margin-top:4px}
 .flowrow small+small{margin-top:1px}
 @media (max-width:560px){.deux{grid-template-columns:minmax(0,1fr)}}
 .grow1>.tag{margin:3px 0 1px}
+.chip.exercice{margin-left:8px;background:var(--g-info-wash);color:var(--g-info);font-size:10.5px;font-family:var(--sans);font-weight:500;vertical-align:1px}
+.exercice-bandeau.en-cours{box-shadow:0 0 0 1.5px var(--g-info)}
+.exercice-bandeau small{display:block;color:var(--muted);font-size:12px;margin-top:3px;overflow-wrap:anywhere}
+@media (max-width:560px){
+  .exercice-bandeau .notice{flex-wrap:wrap}
+  .exercice-bandeau .notice>.grow1{flex:1 1 calc(100% - 50px)}
+  .exercice-bandeau .notice>.actions{margin-left:42px;flex-direction:row;justify-content:flex-start}
+}
