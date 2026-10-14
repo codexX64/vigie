@@ -79,3 +79,9 @@ sous renfort, jamais un jeton.
 `bouclier.menace` (mode observation), `bouclier.interne` (critique),
 `bouclier.plafond` et `bouclier.passerelle` (élevé). Déclencheurs du Hub :
 « Adresse bloquée », « Machine du réseau suspecte ».
+
+Exercice (`VIGIE_EXERCICE=1` seulement, sinon 404) : `POST /api/bouclier/exercice`
+`{ action: "demarrer" | "arreter" | "effacer", minutes?: 1-120, intensite?: "calme" | "normale" | "attaque" }`,
+session d'administrateur. Ses événements ont un type `exercice.*` et ne sont
+rendus qu'aux sessions : ni `GET /api/evenements` par jeton, ni les compteurs
+de `GET /api/etat`, ni les déclencheurs du Hub ne les voient.
