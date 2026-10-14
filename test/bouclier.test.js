@@ -488,6 +488,73 @@ test('alerte de l’IPS relue par MapMyLAN : même forme qu’une alerte syslog'
   assert.equal(depuisPasserelle(null), null);
 });
 
+// ---------- l'exercice ----------
+const graine = n => () => { n |= 0; n = (n + 0x6d2b79f5) | 0; let t = Math.imul(n ^ (n >>> 15), 1 | n); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+
+test('exercice : de fausses attaques corrélées et bloquées, sans rien envoyer, isoler ni diffuser ; effacé sans toucher au réel', async () => {
+  const { db, magasin } = magasinNeuf();
+  const envois = [], reactions = [], signaux = [];
+  const sources = { public: () => ({ mapmylan: { relie: true } }), appareilParIp: async ip => ({ id: 'x', ip }), mml: async () => { throw Object.assign(new Error('inconnu'), { status: 404 }); } };
+  const moteur = { signaler: async e => { signaux.push(e); return e; }, reagir: async a => { reactions.push(a); } };
+  const b = new Bouclier({ cfg: { donnees: path.join(tmp, 'exercice'), syslogPort: 0 }, db, magasin, moteur, sources, fetch: async () => new Response('', { status: 404 }), log: silence });
+  b.riposte.passerelleAuto = () => ({ forme: 'mapmylan', synchroniser: async l => { envois.push(l); return { 4: { id: 'g', n: l.length } }; }, regles: async () => null });
+  b.exercice.aleatoire = graine(42);
+  b.exercice.demarrer({ minutes: 5, intensite: 'attaque' });
+  clearInterval(b.exercice.minuteur);
+  for (let i = 0; i < 400; i++) b.exercice.tour();
+  await attendre(50);
+  const e = b.exercice.etat();
+  assert.equal(e.actif, true);
+  assert.ok(e.observations > 1000, `${e.observations} observations`);
+  assert.ok(Object.keys(e.scenarios).length >= 7, JSON.stringify(e.scenarios));
+  assert.ok(e.blocages > 5, `${e.blocages} blocages d’exercice`);
+  assert.equal(b.riposte.actifs().length, 0, 'aucun vrai blocage');
+  await b.riposte.synchroniser({ forcer: true });
+  assert.ok(envois.every(l => l.length === 0), 'la passerelle ne reçoit aucune adresse d’exercice');
+  assert.match(b.riposte.texteListe(), /^# VIGIE : 0 adresse bloquée/);
+  const vue = b.etat();
+  assert.ok(vue.internes.some(x => x.exercice && x.score >= x.seuil), 'une machine inventée jugée compromise');
+  assert.equal(reactions.length, 0, 'la réaction rapide n’est jamais appelée');
+  assert.ok(vue.blocages.every(x => x.exercice));
+  assert.ok(vue.alertes.every(x => x.exercice));
+  assert.ok(vue.menaces.some(x => x.raisons.some(r => /liste d’exercice/.test(r.texte))), 'les serveurs de commande inventés sont « listés »');
+  assert.ok(signaux.length > 5 && signaux.every(x => x.type.startsWith('exercice.') && x.diffuser === false && x.memoriser === false && x.titre.startsWith('Exercice · ')), 'ni Telegram, ni billetterie, ni SYNAPSE');
+  assert.ok(vue.internes.every(x => x.ip.startsWith('10.254.')), 'machines inventées hors du réseau');
+  assert.equal(vue.compteurs.ips ?? 0, 0, 'les compteurs réels restent à zéro');
+  assert.ok(vue.compteursExercice.ips > 0);
+
+  // Une vraie attaque pendant l'exercice : bloquée pour de vrai.
+  b.correlateur.observer({ type: 'ips', src: ATTAQUANT, dst: '10.9.1.20', dport: 22, gravite: 1, signature: 'vraie', sid: 1, capteur: 'syslog' });
+  await attendre(20);
+  await b.riposte.synchroniser({ forcer: true });
+  assert.deepEqual(envois.at(-1), [ATTAQUANT]);
+  assert.equal(b.riposte.actifs().length, 1);
+
+  // Fin et effacement : le réel reste.
+  b.exercice.arreter();
+  assert.equal(b.exercice.etat().actif, false);
+  assert.deepEqual(b.menaces.ipListee(b.exercice.c2[0]), [], 'la liste d’exercice disparaît à l’arrêt');
+  db.prepare("INSERT INTO evenements(id, quand, gravite, type, titre) VALUES('ev-exercice-1', ?, 'faible', 'exercice.bouclier.bloque', 'x')").run(Date.now());
+  const ef = b.exercice.effacer();
+  assert.ok(ef.blocages > 5 && ef.adresses > 10 && ef.evenements >= 1, JSON.stringify(ef));
+  assert.deepEqual(b.riposte.blocages().map(x => x.ip), [ATTAQUANT]);
+  assert.deepEqual(b.etat().menaces.map(x => x.ip), [ATTAQUANT]);
+  assert.equal(b.etat().alertes.length, 1);
+  b.arreter();
+});
+
+test('exercice : un tour après l’échéance l’arrête', () => {
+  let t = 1_000_000;
+  const { db, magasin } = magasinNeuf();
+  const b = new Bouclier({ cfg: { donnees: path.join(tmp, 'exercice2'), syslogPort: 0 }, db, magasin, moteur: { signaler: async () => null }, sources: { public: () => ({}) }, fetch: async () => new Response('', { status: 404 }), log: silence, maintenant: () => t });
+  b.exercice.demarrer({ minutes: 1, intensite: 'calme' });
+  assert.equal(b.exercice.etat().actif, true);
+  t += 61e3;
+  b.exercice.tour();
+  assert.equal(b.exercice.etat().actif, false);
+  b.arreter();
+});
+
 // ---------- l'API, de bout en bout ----------
 let vigie, admin;
 const JETON_HUB = 'jeton-du-hub-pour-le-bouclier-0123456789';
@@ -497,7 +564,7 @@ const avec = (jeton, methode, chemin, corps) => new Client(vigie.port).req(metho
 before(async () => {
   process.umask(0o077);
   const fetchMenaces = async url => (url === FLUX.feodo.url ? new Response(`${C2}\n`) : new Response('', { status: 404 }));
-  vigie = await demarrer({ DATA_DIR: path.join(tmp, 'api'), PORT: '0', HOTE: '127.0.0.1', VIGIE_HUB_TOKEN: JETON_HUB, SOCLE_JETON_INSTALLATION: INSTALL, VIGIE_SYSLOG_PORT: '0', VIGIE_SYSLOG_PORT_HOTE: '5514' }, { log: silence, fetchMenaces });
+  vigie = await demarrer({ DATA_DIR: path.join(tmp, 'api'), PORT: '0', HOTE: '127.0.0.1', VIGIE_HUB_TOKEN: JETON_HUB, SOCLE_JETON_INSTALLATION: INSTALL, VIGIE_SYSLOG_PORT: '0', VIGIE_SYSLOG_PORT_HOTE: '5514', VIGIE_EXERCICE: '1' }, { log: silence, fetchMenaces });
   admin = new Client(vigie.port);
   await adminComplet(admin, { jeton: INSTALL });
 });
@@ -558,6 +625,26 @@ test('API : une sonde envoie ses alertes, l’attaquant est bloqué, levé, expo
   assert.deepEqual(t.texte.trim().split('\n').slice(1), ['2a01:4f8::7']);
   assert.equal((await new Client(vigie.port).get('/api/bouclier/liste.txt?jeton=vgl_faux')).status, 401);
   assert.equal((await avec(JETON_HUB, 'GET', '/api/bouclier/liste.txt')).status, 200);
+
+  // L'exercice : session d'administrateur seulement ; ses événements ne sortent pas vers les jetons.
+  assert.equal((await avec(JETON_HUB, 'POST', '/api/bouclier/exercice', { action: 'demarrer' })).status, 403);
+  assert.equal(b.exercice.permis, true);
+  assert.equal((await admin.post('/api/bouclier/exercice', { action: 'demarrer', minutes: 500 })).status, 400);
+  const ex = await admin.post('/api/bouclier/exercice', { action: 'demarrer', minutes: 1, intensite: 'attaque' });
+  assert.equal(ex.status, 200, JSON.stringify(ex.json));
+  assert.equal(ex.json.actif, true);
+  clearInterval(vigie.bouclier.exercice.minuteur);
+  for (let i = 0; i < 300; i++) vigie.bouclier.exercice.tour();
+  await attendre(50);
+  const vusSession = (await admin.get('/api/evenements?limite=500')).json;
+  assert.ok(vusSession.some(e => e.type.startsWith('exercice.')), 'la session voit l’exercice');
+  assert.ok(!(await avec(JETON_HUB, 'GET', '/api/evenements?limite=500')).json.some(e => e.type.startsWith('exercice.')), 'le Hub ne le voit pas');
+  assert.ok(!(await avec(JETON_HUB, 'GET', '/api/evenements?min=eleve')).json.some(e => e.type.startsWith('exercice.')), 'aucun déclencheur « Alerte de sécurité » sur un exercice');
+  const pendant = (await admin.get('/api/bouclier')).json;
+  assert.ok(pendant.exercice.blocages > 0 && pendant.actifs === 1, 'seul le vrai blocage compte');
+  const fin = await admin.post('/api/bouclier/exercice', { action: 'effacer' });
+  assert.equal(fin.json.actif, false);
+  assert.ok(fin.json.blocages === 0 && fin.json.efface.blocages > 0 && fin.json.efface.evenements > 0, JSON.stringify(fin.json));
 
   // Sonde retirée : son jeton ne vaut plus rien.
   assert.equal((await admin.post('/api/bouclier/sondes/retirer', { nom: 'sonde-1' })).status, 200);
