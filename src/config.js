@@ -21,6 +21,8 @@ export function lireConfigVigie(env = process.env) {
     syslogPort: { env: 'VIGIE_SYSLOG_PORT', type: 'entier', min: 0, max: 65535, defaut: 5514 },
     syslogPortHote: { env: 'VIGIE_SYSLOG_PORT_HOTE', type: 'entier', min: 0, max: 65535, defaut: 0 },
     donnees: { env: 'DATA_DIR', type: 'chaine', defaut: '/data' },
+    // L'exercice du bouclier (fausses attaques) : pour une machine de test seulement, coupé par défaut.
+    exercice: { env: 'VIGIE_EXERCICE', type: 'booleen', defaut: false },
     // Jeton du Hub : actions, sondes et déclencheurs. Il sert aussi à vérifier
     // les jetons dérivés que le Hub donne aux services voisins (MapMyLAN).
     jetonHub: { env: 'VIGIE_HUB_TOKEN', type: 'secret', min: 24 },

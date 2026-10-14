@@ -47,6 +47,7 @@ export class Correlateur {
     this.adresses = new Map();      // ip → { score, maj, raisons[], premier, interne, alerte, ports:Map, cibles:Map, auth, verdict }
     this.recentes = [];             // dernières alertes IPS, pour l'interface
     this.compteurs = {};            // type → nombre d'observations
+    this.compteursExercice = {};    // les mêmes, pour un exercice en cours (exercice.js)
     this.listeesVues = new Map();   // ip → heure du dernier contrôle des listes
   }
 
@@ -55,9 +56,11 @@ export class Correlateur {
     const t = this.maintenant();
     if (!a) {
       if (this.adresses.size >= MAX_ADRESSES) this.elaguer();
-      a = { ip, score: 0, maj: t, premier: t, interne, raisons: [], ports: new Map(), cibles: new Map(), auth: [], verdict: false, vu: 0 };
+      a = { ip, score: 0, maj: t, premier: t, interne, raisons: [], ports: new Map(), cibles: new Map(), auth: [], verdict: false, vu: 0, exercice: !!this.courante?.exercice };
       this.adresses.set(ip, a);
     }
+    // Une vraie observation sur une adresse d'exercice : elle redevient réelle.
+    else if (a.exercice && !this.courante?.exercice) a.exercice = false;
     // Effacement : demi-vie en minutes.
     const demi = Math.max(5, this.reglage().demiVieMinutes || 60) * 60e3;
     a.score *= 0.5 ** ((t - a.maj) / demi);
@@ -82,7 +85,7 @@ export class Correlateur {
     a.raisons = a.raisons.slice(0, 12);
     if (!a.verdict && a.score >= this.seuil(a)) {
       a.verdict = true;
-      this.surVerdict({ ip: a.ip, interne: a.interne, score: Math.round(a.score), raisons: a.raisons.slice(0, 6).map(x => x.texte), observation: o || null });
+      this.surVerdict({ ip: a.ip, interne: a.interne, score: Math.round(a.score), raisons: a.raisons.slice(0, 6).map(x => x.texte), observation: o || null, exercice: a.exercice });
     }
   }
 
@@ -97,13 +100,16 @@ export class Correlateur {
 
   observer(o) {
     if (!o) return;
-    this.compteurs[o.type] = (this.compteurs[o.type] || 0) + 1;
+    // L'observation en cours : une adresse créée par un exercice en porte la marque.
+    this.courante = o;
+    const c = o.exercice ? this.compteursExercice : this.compteurs;
+    c[o.type] = (c[o.type] || 0) + 1;
     const ext = ip => ip && estPublique(ip);
     const int = ip => ip && estInterne(ip);
     const t = this.maintenant();
 
     if (o.type === 'ips') {
-      this.recentes.unshift({ quand: o.quand, src: o.src, dst: o.dst, dport: o.dport, signature: o.signature, gravite: o.gravite, action: o.action, categorie: o.categorie, capteur: o.capteur });
+      this.recentes.unshift({ quand: o.quand, src: o.src, dst: o.dst, dport: o.dport, signature: o.signature, gravite: o.gravite, action: o.action, categorie: o.categorie, capteur: o.capteur, exercice: !!o.exercice });
       this.recentes = this.recentes.slice(0, 200);
       const p = POINTS_IPS[o.gravite] ?? 10;
       const sig = `${o.signature || 'alerte'}${o.sid ? ` (sid ${o.sid})` : ''}`;
@@ -177,12 +183,21 @@ export class Correlateur {
     }
   }
 
+  /** Fin d'un exercice : ses adresses, ses alertes et ses compteurs disparaissent. */
+  effacerExercice() {
+    let n = 0;
+    for (const [ip, a] of this.adresses) if (a.exercice) { this.adresses.delete(ip); this.listeesVues.delete(ip); n++; }
+    this.recentes = this.recentes.filter(r => !r.exercice);
+    this.compteursExercice = {};
+    return n;
+  }
+
   /** Les adresses qui ont des points, de la plus menaçante à la moins menaçante. */
   menacesActuelles({ limite = 100, interne = null } = {}) {
     const t = this.maintenant();
     const demi = Math.max(5, this.reglage().demiVieMinutes || 60) * 60e3;
     return [...this.adresses.values()]
-      .map(a => ({ ip: a.ip, interne: a.interne, score: Math.round(a.score * 0.5 ** ((t - a.maj) / demi)), raisons: a.raisons.slice(0, 6), premier: a.premier, dernier: a.maj, vu: a.vu, seuil: this.seuil(a) }))
+      .map(a => ({ ip: a.ip, interne: a.interne, exercice: a.exercice, score: Math.round(a.score * 0.5 ** ((t - a.maj) / demi)), raisons: a.raisons.slice(0, 6), premier: a.premier, dernier: a.maj, vu: a.vu, seuil: this.seuil(a) }))
       .filter(a => a.score > 0 && (interne === null || a.interne === interne))
       .sort((x, y) => y.score - x.score).slice(0, limite);
   }

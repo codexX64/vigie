@@ -26,6 +26,7 @@ export const FLUX = {
 };
 
 const TAILLE_MAX = 40 * 1024 * 1024;
+const EXERCICE = { id: 'exercice', nom: 'liste d’exercice', poids: 100, sujet: 'serveurs de commande inventés pour l’exercice' };
 const DOMAINE = /^(?=.{1,253}$)([a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/;
 
 /** Les entrées d'une liste, selon son format. Les adresses non publiques sont toujours écartées. */
@@ -111,10 +112,19 @@ export class Menaces {
     return faits;
   }
 
+  /** La liste d'un exercice (exercice.js) : quelques adresses et domaines inventés, en mémoire seulement. */
+  poserExercice({ ips = [], domaines = [] } = {}) {
+    const e = new EnsembleIp();
+    for (const x of ips) e.ajouter(x);
+    this.exercice = { ip: e.figer(), dom: new Set(domaines) };
+  }
+  retirerExercice() { this.exercice = null; }
+
   /** Les listes où figure une adresse : [{ id, nom, poids, sujet }]. */
   ipListee(ip) {
     if (!estPublique(ip)) return [];
     const defs = this.definitions(), out = [];
+    if (this.exercice?.ip.contient(ip)) out.push(EXERCICE);
     for (const [id, e] of this.ip) if (e.contient(ip)) out.push({ id, nom: defs[id]?.nom || id, poids: defs[id]?.poids ?? 50, sujet: defs[id]?.sujet || '' });
     return out;
   }
@@ -124,6 +134,7 @@ export class Menaces {
     if (!d) return [];
     const parents = d.split('.').map((_, i, t) => t.slice(i).join('.')).filter(x => x.includes('.'));
     const defs = this.definitions(), out = [];
+    if (this.exercice && parents.some(p => this.exercice.dom.has(p))) out.push(EXERCICE);
     for (const [id, s] of this.dom) if (parents.some(p => s.has(p))) out.push({ id, nom: defs[id]?.nom || id, poids: defs[id]?.poids ?? 50, sujet: defs[id]?.sujet || '' });
     return out;
   }
