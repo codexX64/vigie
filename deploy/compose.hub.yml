@@ -35,6 +35,8 @@ services:
       # Le bouclier : récepteur syslog dans le conteneur, port vu de la passerelle.
       VIGIE_SYSLOG_PORT: "5514"
       VIGIE_SYSLOG_PORT_HOTE: "{{config.SYSLOG_PORT}}"
+      # Fausses attaques pour regarder le bouclier : machine de test seulement.
+      VIGIE_EXERCICE: "{{config.EXERCICE}}"
       # Les sources. Chaque jeton est dérivé par le Hub du jeton de la source,
       # pour VIGIE seule : il ne vaut rien ailleurs, et la source le vérifie
       # sans rien stocker. MapMyLAN est requis ; les autres, s'ils existent.

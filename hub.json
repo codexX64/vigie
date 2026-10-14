@@ -198,6 +198,25 @@
       "help": "Port UDP et TCP ouvert sur la machine pour les journaux de la passerelle UniFi (UniFi Network → Integrations → Activity Logging → SIEM Server, et CyberSecure → Traffic Logging). Seuls les émetteurs déclarés dans VIGIE → Bouclier sont lus ; sans liste, toute adresse privée."
     },
     {
+      "key": "EXERCICE",
+      "label": "Exercice du bouclier (machine de test)",
+      "type": "select",
+      "default": "0",
+      "required": true,
+      "advanced": true,
+      "options": [
+        {
+          "value": "0",
+          "label": "Non — réseau réel"
+        },
+        {
+          "value": "1",
+          "label": "Oui — machine de test : fausses attaques à la demande"
+        }
+      ],
+      "help": "Ajoute « Exercice » dans VIGIE → Bouclier : de fausses attaques pour regarder le bouclier travailler. Rien n'en sort (ni passerelle, ni isolement, ni alerte). À laisser sur « Non » sur le réseau réel."
+    },
+    {
       "key": "HUB_TOKEN",
       "label": "Jeton du Hub",
       "type": "secret",
