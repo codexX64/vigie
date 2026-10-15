@@ -9,6 +9,7 @@ import {
   toast, confirmer, dialogue, feuille, ajouterPictos,
 } from '/socle/compte.js';
 import { pageBouclier } from './bouclier.js';
+import { pageSentinelle } from './sentinelle.js';
 
 appliquerTheme();
 const SERVICE = 'VIGIE';
@@ -31,6 +32,7 @@ ajouterPictos({
   courbe: '<path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/>',
   muraille: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M3 15h18M9 5v5M15 10v5M9 15v4"/>',
   puce: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+  radar: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6.5-6.5M12 3v2M21 12h-2"/>',
 });
 
 const GRAVITES = ['critique', 'eleve', 'faible', 'info', 'safe'];
@@ -54,6 +56,7 @@ const PAGES = {
   constats: { titre: 'Constats', ic: 'liste', rendre: pageConstats },
   historique: { titre: 'Historique', ic: 'courbe', rendre: pageHistorique },
   bouclier: { titre: 'Bouclier', ic: 'muraille', rendre: () => pageBouclier({ api, admin, sur, quand, interrupteur, suivre, recharger: () => aller('bouclier') }) },
+  sentinelle: { titre: 'Sentinelle', ic: 'radar', rendre: () => pageSentinelle({ api, admin, sur, quand, interrupteur, suivre, recharger: () => aller('sentinelle') }) },
   evenements: { titre: 'Événements', ic: 'cloche', rendre: pageEvenements },
   actions: { titre: 'Actions', ic: 'eclair', rendre: pageActions },
   ...(admin ? { reglages: { titre: 'Réglages', ic: 'reglages', rendre: pageReglages } } : {}),
@@ -68,7 +71,7 @@ const app = h('div', { class: 'app' },
   h('nav', { class: 'rail', 'aria-label': 'Navigation' },
     h('div', { class: 'mark' }, h('div', { class: 'g' }, icone('bouclier', 15)), h('b', { text: SERVICE }), h('i', { class: 'pulse' })),
     groupe('Audit', ['tableau', 'constats', 'historique']),
-    groupe('Veille', ['bouclier', 'evenements', 'actions']),
+    groupe('Veille', ['bouclier', 'sentinelle', 'evenements', 'actions']),
     groupe('Système', ['reglages', 'securite', 'comptes']),
     h('div', { class: 'railcard' },
       h('div', { class: 'row' }, icone('bouclier', 14), h('span', { class: 'tronque', text: 'Score' }), railScore),

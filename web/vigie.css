@@ -124,3 +124,27 @@ details>summary{cursor:pointer;color:var(--muted);font-size:13px;margin-top:4px}
 .flowrow small+small{margin-top:1px}
 @media (max-width:560px){.deux{grid-template-columns:minmax(0,1fr)}}
 .grow1>.tag{margin:3px 0 1px}
+
+/* Sentinelle */
+.direct{max-height:360px;overflow:auto;font-size:12.5px;border-top:1px solid var(--hair-soft)}
+.direct:empty::after{content:'En attente : les observations du bouclier et les événements de la sentinelle défilent ici dès qu’un journal arrive.';display:block;padding:14px 18px;color:var(--muted)}
+.dl{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:10px;align-items:baseline;padding:5px 18px;border-bottom:1px solid var(--hair-soft);border-left:3px solid transparent}
+.dl.g-faible{border-left-color:var(--g-faible)}.dl.g-eleve{border-left-color:var(--g-eleve);background:var(--g-eleve-wash)}.dl.g-critique{border-left-color:var(--g-critique);background:var(--alarm-wash)}
+.dh{font-size:11.5px;color:var(--faint)}
+.dq{font-family:var(--mono);font-size:11px;min-width:34px;text-align:center;border-radius:5px;padding:1px 5px;background:var(--well);color:var(--ink-soft)}
+.dl.g-eleve .dq,.dl.g-critique .dq{color:var(--ink);font-weight:600}
+.dt{min-width:0;overflow-wrap:anywhere;color:var(--ink-soft)}
+.dt b{font-weight:600;color:var(--ink)}
+.dt small{color:var(--muted)}
+.field.sm{width:auto;padding:3px 8px;font-size:12px}
+.direct-ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.regle-ligne{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid var(--hair-soft);font-size:12.5px;align-items:baseline}
+.regle-ligne>span{min-width:0;overflow-wrap:anywhere}
+.regle-ligne small{color:var(--muted);text-align:right;flex:1;min-width:120px}
+.regle-ligne b{font-family:var(--mono);font-weight:500}
+.famille{margin-top:12px}
+.famille h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:500}
+.regles-ref>summary{display:flex;justify-content:space-between;align-items:center;padding:13px 18px;margin:0;list-style:none}
+.regles-ref>summary::-webkit-details-marker{display:none}
+.regles-ref>summary h2{font-size:14px;font-weight:600;margin:0}
+pre.conf{white-space:pre-wrap;font-size:12px;background:var(--well);border-radius:8px;padding:10px 12px;margin-top:6px;line-height:1.5}
