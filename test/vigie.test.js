@@ -472,6 +472,6 @@ test('manifeste : une seule version partout, port des journaux publié en UDP et
   for (const p of ['udp', 'tcp']) assert.ok(c.includes(`"0.0.0.0:{{config.SYSLOG_PORT}}:5514/${p}"`), p);
   assert.ok(c.includes('VIGIE_SYSLOG_PORT_HOTE: "{{config.SYSLOG_PORT}}"'));
   assert.equal(m.config.find(c => c.key === 'SYSLOG_PORT').default, 5514);
-  for (const id of ['threat.blocked', 'host.compromised']) assert.ok(m.triggers.some(t => t.id === id), id);
-  for (const id of ['shield.state', 'ip.block']) assert.ok(m.actions.some(a => a.id === id), id);
+  for (const id of ['threat.blocked', 'host.compromised', 'host.alert']) assert.ok(m.triggers.some(t => t.id === id), id);
+  for (const id of ['shield.state', 'sentinel.state', 'ip.block']) assert.ok(m.actions.some(a => a.id === id), id);
 });
