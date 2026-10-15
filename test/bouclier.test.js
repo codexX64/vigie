@@ -18,6 +18,7 @@ import { messageSyslog, lireCef, lireLigne, depuisEve } from '../src/bouclier/jo
 import { lire, Menaces, FLUX } from '../src/bouclier/menaces.js';
 import { Correlateur, semblableDga } from '../src/bouclier/correlation.js';
 import { Riposte } from '../src/bouclier/riposte.js';
+import { Cloudflare, NOM_LISTE } from '../src/bouclier/cloudflare.js';
 import { Unifi, NOMS_LISTES } from '../src/bouclier/unifi.js';
 import { observer, requete, empreinte } from '../src/bouclier/tls.js';
 import { Recepteur } from '../src/bouclier/recepteur.js';
@@ -208,12 +209,12 @@ test('corrélation : balayages, force brute, listes, serveur de commande, machin
 });
 
 // ---------- riposte ----------
-function riposte(reglage = {}, unifi = null) {
+function riposte(reglage = {}, unifi = null, cloudflare = null) {
   const { db, magasin } = magasinNeuf();
   magasin.poserReglage('bouclier', reglage);
   let t = Date.parse('2026-10-13T10:00:00Z');
   const signaux = [];
-  const r = new Riposte({ db, magasin, signaler: async e => { signaux.push(e); return e; }, maintenant: () => t, log: silence, unifiFabrique: unifi || (() => null) });
+  const r = new Riposte({ db, magasin, signaler: async e => { signaux.push(e); return e; }, maintenant: () => t, log: silence, unifiFabrique: unifi || (() => null), ...(cloudflare ? { cloudflareFabrique: cloudflare } : {}) });
   return { r, magasin, signaux, avancer: ms => { t += ms; } };
 }
 const verdict = (ip, extra = {}) => ({ ip, interne: false, score: 120, raisons: ['IPS : ET x'], ...extra });
@@ -591,4 +592,90 @@ test('API : réglages du bouclier validés, listes actualisées, passerelle déc
   const sd = await admin.post('/api/bouclier/unifi/sonde', { hote: '127.0.0.1', port: 1 });
   assert.equal(sd.status, 502);
   assert.match(JSON.stringify(sd.json), /Passerelle injoignable/);
+});
+
+
+// ---------- Cloudflare et la tempête ----------
+/** Un faux Cloudflare : l'API v4 telle que VIGIE l'appelle, et ce qu'elle retient. */
+function fauxCloudflare() {
+  const etat = { listes: [], items: null, regles: {}, niveau: { zone1: 'medium' }, appels: [] };
+  const rep = (result) => new Response(JSON.stringify({ success: true, result, errors: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  const fetch = async (url, o = {}) => {
+    const u = new URL(url); const p = u.pathname.replace('/client/v4', ''); const m = o.method || 'GET';
+    etat.appels.push(`${m} ${p}`);
+    if (o.headers.authorization !== 'Bearer jeton-cloudflare-de-test-0123456789') return new Response(JSON.stringify({ success: false, errors: [{ code: 10000, message: 'Authentication error' }] }), { status: 401 });
+    if (p === '/user/tokens/verify') return rep({ status: 'active' });
+    if (p === '/zones') return rep([{ id: 'zone1', name: 'exemple.fr', account: { id: 'compte1' }, plan: { legacy_id: 'free' } }]);
+    if (p === '/accounts') return rep([{ id: 'compte1' }]);
+    if (p === '/accounts/compte1/rules/lists' && m === 'GET') return rep(etat.listes);
+    if (p === '/accounts/compte1/rules/lists' && m === 'POST') { const l = { id: 'liste1', name: JSON.parse(o.body).name }; etat.listes.push(l); return rep(l); }
+    if (p === '/accounts/compte1/rules/lists/liste1/items' && m === 'PUT') { etat.items = JSON.parse(o.body); return rep({ operation_id: 'op1' }); }
+    if (p === '/zones/zone1/rulesets/phases/http_request_firewall_custom/entrypoint' && m === 'GET') return etat.regles.zone1 ? rep({ id: 'rs1', rules: etat.regles.zone1 }) : new Response(JSON.stringify({ success: false, errors: [{ code: 10000, message: 'not found' }] }), { status: 404 });
+    if (p === '/zones/zone1/rulesets/phases/http_request_firewall_custom/entrypoint' && m === 'PUT') { etat.regles.zone1 = JSON.parse(o.body).rules; return rep({ id: 'rs1' }); }
+    if (p === '/zones/zone1/settings/security_level' && m === 'GET') return rep({ value: etat.niveau.zone1 });
+    if (p === '/zones/zone1/settings/security_level' && m === 'PATCH') { etat.niveau.zone1 = JSON.parse(o.body).value; return rep({ value: etat.niveau.zone1 }); }
+    return new Response(JSON.stringify({ success: false, errors: [{ code: 1, message: `inattendu ${m} ${p}` }] }), { status: 400 });
+  };
+  return { etat, fabrique: o => new Cloudflare({ ...o, fetch }) };
+}
+
+test('cloudflare : jeton sondé, liste créée et remplie (IPv6 en /64), règle posée une fois par zone, mode Under Attack rendu après le délai', async () => {
+  const cf = fauxCloudflare();
+  const { r, magasin, signaux, avancer } = riposte({ cloudflareZones: [{ id: 'zone1', nom: 'exemple.fr' }] }, null, cf.fabrique);
+  assert.equal(r.cloudflare(), null, 'sans jeton, rien');
+  magasin.poserSecret('bouclier', 'cloudflareJeton', 'jeton-cloudflare-de-test-0123456789');
+  const s = await r.cloudflare().sonder();
+  assert.equal(s.compte, 'compte1'); assert.equal(s.zones[0].nom, 'exemple.fr');
+  await r.bloquer({ ip: ATTAQUANT, auteur: 'ana' });
+  await r.bloquer({ ip: '2a02:1234:5:6:7:8:9:a', auteur: 'ana' });
+  const e = await r.synchroniserCloudflare({ forcer: true });
+  assert.equal(e.ok, true, e.erreur); assert.equal(e.envoyees, 2);
+  assert.deepEqual(cf.etat.items.map(x => x.ip), [ATTAQUANT, '2a02:1234:5:6::/64']);
+  assert.equal(cf.etat.listes[0].name, NOM_LISTE); assert.equal(magasin.reglage('bouclier').cloudflareListe, 'liste1');
+  assert.equal(cf.etat.regles.zone1[0].expression, `(ip.src in $${NOM_LISTE})`);
+  assert.deepEqual(e.zones, [{ id: 'zone1', nom: 'exemple.fr', regle: true, erreur: null }]);
+  // Une deuxième synchronisation sans changement ne rappelle pas Cloudflare ; la règle n'est pas doublée.
+  const n = cf.etat.appels.length;
+  await r.synchroniserCloudflare();
+  assert.equal(cf.etat.appels.length, n);
+  await r.synchroniserCloudflare({ forcer: true });
+  assert.equal(cf.etat.regles.zone1.length, 1);
+  // Mode Under Attack, à la main, puis levé par le temps : l'ancien niveau revient.
+  await r.modeAttaque(true, { minutes: 15, auteur: 'ana' });
+  assert.equal(cf.etat.niveau.zone1, 'under_attack');
+  avancer(10 * 60e3); await r.expirerAttaque(); assert.equal(cf.etat.niveau.zone1, 'under_attack', 'pas encore');
+  avancer(6 * 60e3); await r.expirerAttaque(); assert.equal(cf.etat.niveau.zone1, 'medium', 'rendu');
+  assert.equal(r.etatCloudflare.attaque, null);
+  // Un jeton qui tombe : une alerte, une seule.
+  magasin.poserSecret('bouclier', 'cloudflareJeton', 'jeton-faux-mais-assez-long-0123456789');
+  await r.bloquer({ ip: '185.220.101.9', auteur: 'ana' });
+  await r.synchroniserCloudflare({ forcer: true }); await r.synchroniserCloudflare({ forcer: true });
+  assert.equal(signaux.filter(x => x.type === 'bouclier.cloudflare').length, 1);
+  assert.equal(r.etatCloudflare.ok, false); assert.match(r.etatCloudflare.erreur, /Authentication/);
+});
+
+test('tempête : des dizaines de sources sur un même port en une minute → événement critique, les plus bruyantes bloquées hors plafond, Cloudflare en mode Under Attack', async () => {
+  const cf = fauxCloudflare();
+  const { r, magasin, signaux, avancer } = riposte({ autoParHeure: 3, tempeteSources: 30, tempeteLignes: 300, tempeteBlocages: 10, cloudflareModeAttaque: true, cloudflareZones: [{ id: 'zone1', nom: 'exemple.fr' }] }, null, cf.fabrique);
+  magasin.poserSecret('bouclier', 'cloudflareJeton', 'jeton-cloudflare-de-test-0123456789');
+  const tempetes = [];
+  let t = Date.parse('2026-10-13T10:00:00Z');
+  const c = new Correlateur({ menaces: null, reglage: () => magasin.reglage('bouclier'), maintenant: () => t, surVerdict: () => {}, surTempete: tp => tempetes.push(tp) });
+  // Quarante adresses, dix paquets chacune sur le 443 en trente secondes : tempête.
+  for (let i = 0; i < 40; i++) for (let k = 0; k < 10; k++) { c.observer({ type: 'pare-feu', quand: t, src: `45.155.205.${i + 1}`, dst: '10.9.1.2', dport: 443, action: 'bloque', capteur: 'x' }); t += 75; }
+  assert.equal(tempetes.length, 1);
+  // Signalée dès que les seuils sont franchis (trente sources, trois cents lignes), pas à la fin de la salve.
+  assert.equal(tempetes[0].port, 443); assert.ok(tempetes[0].sources >= 30 && tempetes[0].paquets >= 300, JSON.stringify(tempetes[0]));
+  assert.equal(tempetes[0].top.length, tempetes[0].sources);
+  // Une deuxième salve dans les dix minutes : pas de deuxième signalement.
+  for (let i = 0; i < 40; i++) for (let k = 0; k < 10; k++) { c.observer({ type: 'pare-feu', quand: t, src: `45.155.205.${i + 1}`, dst: '10.9.1.2', dport: 443, action: 'bloque', capteur: 'x' }); t += 75; }
+  assert.equal(tempetes.length, 1);
+  // La riposte : dix blocages malgré le plafond de trois par heure, l'événement, le mode Under Attack.
+  const out = await r.tempete(tempetes[0]);
+  assert.equal(out.bloquees.length, 10);
+  assert.equal(r.actifs().length, 10);
+  assert.equal(cf.etat.niveau.zone1, 'under_attack');
+  const ev = signaux.find(x => x.type === 'bouclier.tempete');
+  assert.ok(ev && ev.gravite === 'critique' && /port 443/.test(ev.titre) && /10 adresses/.test(ev.texte) && /Under Attack/.test(ev.texte), JSON.stringify(ev));
+  avancer(16 * 60e3); await r.expirerAttaque(); assert.equal(cf.etat.niveau.zone1, 'medium');
 });
