@@ -55,8 +55,9 @@ const PAGES = {
   tableau: { titre: 'Tableau de bord', ic: 'bouclier', rendre: pageTableau },
   constats: { titre: 'Constats', ic: 'liste', rendre: pageConstats },
   historique: { titre: 'Historique', ic: 'courbe', rendre: pageHistorique },
-  bouclier: { titre: 'Bouclier', ic: 'muraille', rendre: () => pageBouclier({ api, admin, sur, quand, interrupteur, suivre, recharger: () => aller('bouclier') }) },
-  sentinelle: { titre: 'Sentinelle', ic: 'radar', rendre: () => pageSentinelle({ api, admin, sur, quand, interrupteur, suivre, recharger: () => aller('sentinelle') }) },
+  // recharger : la même page, dans la même vue (le hash porte l'onglet).
+  bouclier: { titre: 'Bouclier', ic: 'muraille', rendre: p => pageBouclier({ api, admin, sur, quand, interrupteur, suivre, aller, params: p, recharger: () => aller(location.hash.slice(1) || 'bouclier') }) },
+  sentinelle: { titre: 'Sentinelle', ic: 'radar', rendre: p => pageSentinelle({ api, admin, sur, quand, interrupteur, suivre, aller, params: p, recharger: () => aller(location.hash.slice(1) || 'sentinelle') }) },
   evenements: { titre: 'Événements', ic: 'cloche', rendre: pageEvenements },
   actions: { titre: 'Actions', ic: 'eclair', rendre: pageActions },
   ...(admin ? { reglages: { titre: 'Réglages', ic: 'reglages', rendre: pageReglages } } : {}),

@@ -19,7 +19,7 @@ const pluriel = (n, mot) => `${n.toLocaleString('fr-FR')} ${mot}${n > 1 ? 's' : 
 const chip = n => h('span', { class: `chip g-${GRAV(n)}`, text: `niv. ${n}` });
 const GROUPES_LIB = { 'force-brute': 'force brute', compromission: 'compromission', balayage: 'balayage', 'web-attaque': 'attaque web', 'premiere-fois': 'première fois', integrite: 'intégrité', 'compte-admin': 'compte admin', 'utilisateur-invalide': 'compte inexistant', 'deni-de-service': 'déni de service', 'commande-suspecte': 'commande suspecte', persistance: 'persistance', exfiltration: 'exfiltration', 'nouvel-appareil': 'nouvel appareil', ecoute: 'écoute', 'blocage-cible': 'blocage par la cible' };
 
-export async function pageSentinelle({ api, admin, sur, quand, interrupteur, suivre, recharger }) {
+export async function pageSentinelle({ api, admin, sur, quand, interrupteur, suivre, recharger, aller, params = null }) {
   let etat = await api.get('/api/sentinelle');
   const reglages = admin ? (await api.get('/api/reglages')).sentinelle : null;
 
@@ -75,7 +75,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
   const btnPause = h('button', { class: 'btn sm', type: 'button', onclick: () => { pause = !pause; btnPause.textContent = pause ? 'Reprendre' : 'Pause'; } }, 'Pause');
 
   // ---- les vues ----
-  function peindre_() {
+  let peindre_ = () => {
     const e = etat;
     const s = e.stats;
     const b = e.bilan;
@@ -120,25 +120,63 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
 
     regles.replaceChildren(...(e.regles.length ? e.regles.slice(0, 20).map(r => h('div', { class: 'regle-ligne' }, h('span', { class: 'mono', text: r.id }), h('b', { text: r.n.toLocaleString('fr-FR') })))
       : [h('p', { class: 'vide', text: 'Aucune règle déclenchée pour l’instant.' })]));
-  }
+  };
   async function peindre() { etat = await api.get('/api/sentinelle'); peindre_(); }
-  peindre_();
   suivre(peindre, 15000);
 
-  const page = h('div', { class: 'page' },
-    h('div', { class: 'headrow' },
-      h('div', {}, h('h1', { class: 'title', text: 'Sentinelle' }), lede),
-      h('div', { class: 'actions' }, admin ? h('button', { class: 'btn', type: 'button', onclick: () => essai.scrollIntoView({ behavior: 'smooth' }) }, icone('jouer', 15), 'Essayer une ligne') : null)),
-    figs, avis,
-    h('div', { class: 'card mb12' }, h('header', {}, h('h2', { text: 'En direct' }), h('span', { class: 'note direct-ctl' }, temoin, selNiveau, btnPause)), direct),
-    h('div', { class: 'split' },
-      h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Alertes' }), h('span', { class: 'note', text: `niveau ${etat.seuil} et plus` })), alertes),
-      h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Hôtes' }), h('span', { class: 'note', text: 'par exposition' })), hotes)),
-    h('div', { class: 'split mt12' },
-      h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Sources d’attaque' }), h('span', { class: 'note', text: '24 h' })), sources),
-      h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Règles les plus déclenchées' }), h('span', { class: 'note', text: 'depuis le démarrage' })), h('div', { class: 'cardbody' }, regles))),
-    admin ? h('div', { class: 'grille mt12' }, carteReglages(), carteEssai(), carteBrancher()) : h('div', { class: 'grille mt12' }, carteBrancher()),
-    carteRegles());
+  // L'essentiel sur une page : chiffres, avis, le direct en court, cinq
+  // alertes, cinq hôtes. Chaque liste a sa page (#sentinelle?vue=…), hors du
+  // menu, avec un retour ; les réglages et l'essai aussi.
+  const TITRES = { direct: 'En direct', alertes: 'Alertes', hotes: 'Hôtes', sources: 'Sources et règles', reglages: admin ? 'Réglages de la sentinelle' : 'Brancher un hôte' };
+  const vue = TITRES[params?.get?.('vue')] ? params.get('vue') : 'ensemble';
+  const ouvrirVue = k => aller(`sentinelle?vue=${k}`);
+  const voirPlus = k => h('button', { class: 'btn sm flat', type: 'button', onclick: () => ouvrirVue(k) }, 'Tout voir');
+  const carte = (titre, note, corps) => h('div', { class: 'card' }, h('header', {}, h('h2', { text: titre }), note), corps);
+  const apercuAlertes = h('div', {}), apercuHotes = h('div', {});
+  const noteAlertes = h('span', { class: 'note' }), noteHotes = h('span', { class: 'note' });
+  const peindreApercus = () => {
+    apercuAlertes.replaceChildren(...[...alertes.children].slice(0, 5).map(x => x.cloneNode(true)));
+    apercuHotes.replaceChildren(...[...hotes.children].slice(0, 5).map(x => x.cloneNode(true)));
+    const n = (x, total) => (total > 5 ? `5 sur ${total}` : total ? String(total) : '');
+    noteAlertes.textContent = n(0, etat.recentes.length); noteHotes.textContent = n(0, etat.hotes.length);
+  };
+  const peindreAvant = peindre_;
+  peindre_ = () => { peindreAvant(); peindreApercus(); };
+
+  const retour = h('button', { class: 'btn sm flat', type: 'button', onclick: () => aller('sentinelle') }, icone('retour', 14), 'Sentinelle');
+  const tete = (titre, actions = []) => h('div', { class: 'headrow' },
+    h('div', {}, vue !== 'ensemble' ? h('div', { class: 'fil' }, retour) : null, h('h1', { class: 'title', text: titre }), vue === 'ensemble' ? lede : null),
+    h('div', { class: 'actions' }, ...actions));
+  const directCtl = h('span', { class: 'note direct-ctl' }, temoin, selNiveau, btnPause);
+
+  let corps;
+  if (vue === 'ensemble') {
+    direct.classList.add('court');
+    corps = [
+      tete('Sentinelle', [admin ? h('button', { class: 'btn', type: 'button', onclick: () => ouvrirVue('reglages') }, icone('reglages', 15), 'Réglages') : h('button', { class: 'btn', type: 'button', onclick: () => ouvrirVue('reglages') }, icone('serveur', 15), 'Brancher un hôte')]),
+      figs, avis,
+      h('div', { class: 'card mb12' }, h('header', {}, h('h2', { text: 'En direct' }), h('span', { class: 'row' }, temoin, voirPlus('direct'))), direct),
+      h('div', { class: 'split' },
+        carte('Dernières alertes', h('span', { class: 'row' }, noteAlertes, voirPlus('alertes')), apercuAlertes),
+        carte('Hôtes les plus exposés', h('span', { class: 'row' }, noteHotes, voirPlus('hotes')), apercuHotes)),
+      h('div', { class: 'mt12 actions' }, h('button', { class: 'btn sm', type: 'button', onclick: () => ouvrirVue('sources') }, icone('oeil', 14), 'Sources d’attaque et règles'))];
+  } else if (vue === 'reglages') {
+    corps = [tete(TITRES.reglages), admin ? h('div', { class: 'grille' }, carteReglages(), carteEssai(), carteBrancher()) : h('div', { class: 'grille' }, carteBrancher())];
+  } else {
+    const panneau = {
+      direct: () => carte('En direct', directCtl, direct),
+      alertes: () => carte('Alertes', h('span', { class: 'note', text: `niveau ${etat.seuil} et plus` }), alertes),
+      hotes: () => carte('Hôtes', h('span', { class: 'note', text: 'par exposition' }), hotes),
+      sources: () => h('div', {},
+        h('div', { class: 'split' },
+          carte('Sources d’attaque', h('span', { class: 'note', text: '24 h' }), sources),
+          carte('Règles les plus déclenchées', h('span', { class: 'note', text: 'depuis le démarrage' }), h('div', { class: 'cardbody' }, regles))),
+        carteRegles()),
+    }[vue]();
+    corps = [tete(TITRES[vue], [admin && vue !== 'direct' ? h('button', { class: 'btn', type: 'button', onclick: () => { ouvrirVue('reglages'); } }, icone('jouer', 15), 'Essayer une ligne') : null]), panneau];
+  }
+  const page = h('div', { class: 'page' }, ...corps);
+  peindre_();
   ouvrir();
   return page;
 

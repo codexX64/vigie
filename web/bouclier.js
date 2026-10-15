@@ -29,7 +29,7 @@ const barre = (score, seuil) => {
   return b;
 };
 
-export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivre, recharger }) {
+export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivre, recharger, aller, params = null }) {
   let etat = await api.get('/api/bouclier');
   const reglages = admin ? (await api.get('/api/reglages')).bouclier : null;
 
@@ -59,6 +59,23 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
     if (fait) { toast('Adresse bloquée.'); await peindre(); }
   })();
 
+  // L'essentiel sur une page : les chiffres, les avis, cinq lignes par liste.
+  // Chaque liste a sa propre page (#bouclier?vue=menaces…), hors du menu,
+  // avec un retour ; les réglages aussi. Les listes longues se déplient.
+  const TITRES = { menaces: 'Menaces extérieures', blocages: 'Blocages', machines: 'Machines du réseau', alertes: 'Alertes de l’IPS', reglages: 'Réglages du bouclier' };
+  const vue = TITRES[params?.get?.('vue')] ? params.get('vue') : 'ensemble';
+  const deplie = {};
+  const apercus = { menaces: h('div', {}), blocages: h('div', {}), machines: h('div', {}), alertes: h('div', {}) };
+  const compteurs = {};
+  const ouvrir = k => aller(`bouclier?vue=${k}`);
+  const voirPlus = k => { const b = h('button', { class: 'btn sm flat', type: 'button', onclick: () => ouvrir(k) }, 'Tout voir'); return b; };
+  const borner = (k, lignes, n = 50) => {
+    if (lignes.length <= n || deplie[k]) return lignes;
+    return [...lignes.slice(0, n), h('div', { class: 'pad-bas' }, h('button', { class: 'btn sm', type: 'button', onclick: () => { deplie[k] = true; peindre_(); } }, `Voir les ${lignes.length - n} autres`))];
+  };
+  const apercu = (k, lignes, vide) => { apercus[k].replaceChildren(...(lignes.length ? lignes.slice(0, 5) : [vide.cloneNode(true)])); compteurs[k] = lignes.length; };
+  const notesApercu = h('div', {});
+
   function peindre_() {
     const e = etat;
     const maintenant = Date.now();
@@ -68,36 +85,39 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
     const recues = e.syslog.lues + e.sondes.reduce((a, s) => a + s.lues, 0) + (releve.derniere ? 1 : 0);
     lede.textContent = `${MODES[e.mode]} · seuil ${e.seuil} · ${e.listes.filter(l => l.active && l.entrees).length} listes de menaces chargées`;
 
-    const fig = (titre, valeur, detail, ic, chaud = false) => h('div', { class: 'fig' }, h('div', { class: `tile ${chaud ? 'warn' : ''}` }, icone(ic, 15)), h('span', { text: titre }), h('strong', { text: String(valeur) }), h('div', { class: 'delta', text: detail }));
+    const fig = (titre, valeur, detail, ic, chaud = false, cible = null) => h('div', { class: `fig ${cible ? 'cliquable' : ''}`, ...(cible ? { role: 'button', tabindex: 0, onclick: () => ouvrir(cible), onkeydown: ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ouvrir(cible); } } } : {}) },
+      h('div', { class: `tile ${chaud ? 'warn' : ''}` }, icone(ic, 15)), h('span', { text: titre }), h('strong', { text: String(valeur) }), h('div', { class: 'delta', text: detail }));
+    const suspectes = e.internes.filter(x => x.score >= x.seuil / 2);
     figs.replaceChildren(
-      fig('Bloquées', e.actifs, e.mode === 'actif' ? 'sur la passerelle et la liste' : `mode ${e.mode}`, 'bouclier', e.actifs > 0),
-      fig('Menaces suivies', e.menaces.length, e.menaces[0] ? `la plus haute : ${e.menaces[0].score}` : 'aucune adresse notée', 'oeil'),
-      fig('Alertes IPS', e.compteurs.ips || 0, `${(e.compteurs['pare-feu'] || 0).toLocaleString('fr-FR')} lignes de pare-feu`, 'eclair', (e.compteurs.ips || 0) > 0),
-      fig('Machines suspectes', e.internes.filter(x => x.score >= x.seuil / 2).length, 'du réseau local', 'alerte', e.internes.some(x => x.score >= x.seuil)));
+      fig('Bloquées', e.actifs, e.mode === 'actif' ? 'sur la passerelle et la liste' : `mode ${e.mode}`, 'bouclier', e.actifs > 0, 'blocages'),
+      fig('Menaces suivies', e.menaces.length, e.menaces[0] ? `la plus haute : ${e.menaces[0].score}` : 'aucune adresse notée', 'oeil', false, 'menaces'),
+      fig('Alertes IPS', e.compteurs.ips || 0, `${(e.compteurs['pare-feu'] || 0).toLocaleString('fr-FR')} lignes de pare-feu`, 'eclair', (e.compteurs.ips || 0) > 0, 'alertes'),
+      fig('Machines suspectes', suspectes.length, 'du réseau local', 'alerte', e.internes.some(x => x.score >= x.seuil), 'machines'));
 
     const notes = [];
-    if (!recues) notes.push(['warn', 'Rien reçu de la passerelle pour l’instant : ni journal, ni relève par MapMyLAN. Voir « Passerelle » et « Journaux de la passerelle » plus bas.']);
-    else if (releve.active && !e.syslog.lues) notes.push(['', 'Alertes de l’IPS relevées par MapMyLAN chaque minute. Pour voir aussi les refus du pare-feu et le pot de miel, envoie les journaux de la passerelle (carte « Journaux »).']);
+    if (!recues) notes.push(['warn', 'Rien reçu de la passerelle pour l’instant : ni journal, ni relève par MapMyLAN. Voir « Passerelle » et « Journaux de la passerelle » dans Réglages.']);
+    else if (releve.active && !e.syslog.lues) notes.push(['', 'Alertes de l’IPS relevées par MapMyLAN chaque minute. Pour voir aussi les refus du pare-feu et le pot de miel, envoie les journaux de la passerelle (Réglages → Journaux).']);
     else if (e.syslog.derniere && maintenant - e.syslog.derniere > 30 * 60e3) notes.push(['warn', `Plus aucun journal de la passerelle depuis ${duree(maintenant - e.syslog.derniere)}.`]);
-    if (e.syslog.lues && !e.syslog.emetteursDeclares) notes.push(['warn', 'Toute adresse privée peut envoyer des journaux à VIGIE, donc lui faire bloquer une adresse : déclare la passerelle UniFi dans « Liste blanche et émetteurs ».']);
+    if (e.syslog.lues && !e.syslog.emetteursDeclares) notes.push(['warn', 'Toute adresse privée peut envoyer des journaux à VIGIE, donc lui faire bloquer une adresse : déclare la passerelle UniFi dans Réglages → « Liste blanche et émetteurs ».']);
     if (!e.unifi.relie) notes.push(['', 'Aucune passerelle reliée : les blocages restent dans VIGIE et dans la liste exportée, rien n’est coupé à la frontière. Relie le routeur dans MapMyLAN : VIGIE s’en servira seule.']);
     else if (e.unifi.ok === false) notes.push(['warn', `La passerelle ne reçoit plus les blocages : ${e.unifi.erreur}`]);
-    else if (e.unifi.regles && !e.unifi.regles.erreur && (!e.unifi.regles.entrant || !e.unifi.regles.sortant)) notes.push(['warn', `Listes envoyées, mais ${!e.unifi.regles.entrant && !e.unifi.regles.sortant ? 'aucune règle du pare-feu ne les cite' : `la règle ${!e.unifi.regles.entrant ? 'd’entrée' : 'de sortie'} manque`} : elles ne bloquent rien tant que les règles ne sont pas posées (Passerelle UniFi, plus bas).`]);
+    else if (e.unifi.regles && !e.unifi.regles.erreur && (!e.unifi.regles.entrant || !e.unifi.regles.sortant)) notes.push(['warn', `Listes envoyées, mais ${!e.unifi.regles.entrant && !e.unifi.regles.sortant ? 'aucune règle du pare-feu ne les cite' : `la règle ${!e.unifi.regles.entrant ? 'd’entrée' : 'de sortie'} manque`} : elles ne bloquent rien tant que les règles ne sont pas posées (Réglages → Passerelle).`]);
     if (e.mode !== 'actif') notes.push(['', e.mode === 'observer' ? 'Mode observation : VIGIE signale, ne bloque rien.' : 'Mode simulation : VIGIE note ce qu’il aurait bloqué, rien ne part vers la passerelle.']);
     avis.replaceChildren(...notes.map(([c, t]) => h('div', { class: 'card mb12' }, h('div', { class: 'notice' }, h('span', { class: `itile ${c ? 'g-eleve' : 'g-info'}` }, icone(c ? 'alerte' : 'oeil', 15)), h('div', {}, h('p', { text: t }))))));
 
-    menaces.replaceChildren(...(e.menaces.length ? e.menaces.map(m => h('div', { class: 'flowrow', 'data-donnee': '' },
+    const ligneMenace = m => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile ${m.score >= m.seuil ? 'g-critique' : m.score >= m.seuil / 2 ? 'g-eleve' : 'g-faible'}` }, icone('oeil', 15)),
       h('div', { class: 'grow1' }, h('strong', { class: 'ip', text: m.ip }),
         barre(m.score, m.seuil),
         h('small', { text: `${m.score} / ${m.seuil} · ${m.raisons.slice(0, 3).map(r => r.n > 1 ? `${r.texte} (×${r.n})` : r.texte).join(' · ')}` }),
         h('small', { text: `vue ${m.vu} fois · dernière ${depuis(m.dernier)}` })),
       h('div', { class: 'fin' }, bloquees.has(m.ip) ? h('span', { class: 'tag held' }, h('i', { class: 'd' }), 'bloquée')
-        : admin ? h('button', { class: 'btn sm', type: 'button', onclick: () => bloquer(m.ip) }, 'Bloquer') : null)))
-      : [h('p', { class: 'vide', text: 'Aucune adresse extérieure notée. Elles apparaissent ici dès qu’une alerte, un balayage ou une liste de menaces les signale.' })]));
+        : admin ? h('button', { class: 'btn sm', type: 'button', onclick: () => bloquer(m.ip) }, 'Bloquer') : null));
+    const videMenaces = h('p', { class: 'vide', text: 'Aucune adresse extérieure notée. Elles apparaissent ici dès qu’une alerte, un balayage ou une liste de menaces les signale.' });
+    menaces.replaceChildren(...(e.menaces.length ? borner('menaces', e.menaces.map(ligneMenace)) : [videMenaces]));
+    apercu('menaces', e.menaces.map(ligneMenace), videMenaces);
 
-    const montres = (tousBlocages ? e.blocages : actifs).slice(0, 80);
-    blocages.replaceChildren(...(montres.length ? montres.map(b => h('div', { class: 'flowrow', 'data-donnee': '' },
+    const ligneBlocage = b => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile ${b.etat === 'actif' ? 'g-critique' : ''}` }, icone(b.automatique ? 'eclair' : 'bouclier', 15)),
       h('div', { class: 'grow1' }, h('strong', { class: 'ip', text: b.ip }),
         h('span', { class: `tag ${['actif', 'simule'].includes(b.etat) ? (b.etat === 'actif' ? 'held' : 'warn') : 'idle'}` }, h('i', { class: 'd' }),
@@ -108,43 +128,65 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
         admin && ['actif', 'simule'].includes(b.etat) ? h('button', { class: 'btn sm', type: 'button', onclick: sur(async () => {
           if (!(await confirmer(`Lever le blocage de ${b.ip} ?`, 'L’adresse sort de la liste de la passerelle à la prochaine synchronisation (quelques secondes). Une récidive la bloquera plus longtemps.', { oui: 'Lever' }))) return;
           await api.post(`/api/bouclier/blocages/${b.id}/lever`, {}); toast('Blocage levé.'); await peindre();
-        }) }, 'Lever') : null)))
-      : [h('p', { class: 'vide', text: tousBlocages ? 'Aucun blocage.' : 'Aucune adresse bloquée en ce moment.' })]));
+        }) }, 'Lever') : null));
+    const montres = tousBlocages ? e.blocages : actifs;
+    blocages.replaceChildren(...(montres.length ? borner('blocages', montres.map(ligneBlocage)) : [h('p', { class: 'vide', text: tousBlocages ? 'Aucun blocage.' : 'Aucune adresse bloquée en ce moment.' })]));
+    apercu('blocages', actifs.map(ligneBlocage), h('p', { class: 'vide', text: 'Aucune adresse bloquée en ce moment.' }));
 
-    alertes.replaceChildren(...(e.alertes.length ? e.alertes.slice(0, 40).map(a => h('div', { class: 'flowrow', 'data-donnee': '' },
+    const ligneAlerte = a => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile ${a.gravite === 1 ? 'g-critique' : a.gravite === 2 ? 'g-eleve' : 'g-faible'}` }, icone('eclair', 15)),
       h('div', { class: 'grow1' }, h('strong', { text: a.signature || 'alerte' }),
         h('small', { class: 'mono', text: `${a.src || '?'} → ${a.dst || '?'}${a.dport ? `:${a.dport}` : ''}` }),
         h('small', { text: [a.categorie, a.capteur, quand(a.quand)].filter(Boolean).join(' · ') })),
-      h('div', { class: 'fin' }, h('span', { class: `tag ${a.action === 'bloque' ? '' : 'warn'}` }, h('i', { class: 'd' }), a.action === 'bloque' ? 'coupée par l’IPS' : `gravité ${a.gravite}`))))
-      : [h('p', { class: 'vide', text: 'Aucune alerte d’IPS reçue. Sur la passerelle UniFi : CyberSecure → Intrusion Prevention activé, et la catégorie « Intrusion Prevention » envoyée au serveur SIEM.' })]));
+      h('div', { class: 'fin' }, h('span', { class: `tag ${a.action === 'bloque' ? '' : 'warn'}` }, h('i', { class: 'd' }), a.action === 'bloque' ? 'coupée par l’IPS' : `gravité ${a.gravite}`)));
+    const videAlertes = h('p', { class: 'vide', text: 'Aucune alerte d’IPS reçue. Sur la passerelle UniFi : CyberSecure → Intrusion Prevention activé, et la catégorie « Intrusion Prevention » envoyée au serveur SIEM.' });
+    alertes.replaceChildren(...(e.alertes.length ? borner('alertes', e.alertes.map(ligneAlerte)) : [videAlertes]));
+    apercu('alertes', e.alertes.map(ligneAlerte), videAlertes);
 
-    internes.replaceChildren(...(e.internes.length ? e.internes.map(m => h('div', { class: 'flowrow', 'data-donnee': '' },
+    const ligneInterne = m => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile ${m.score >= m.seuil ? 'g-critique' : 'g-eleve'}` }, icone('alerte', 15)),
       h('div', { class: 'grow1' }, h('strong', { class: 'ip', text: m.ip }), barre(m.score, m.seuil),
         h('small', { text: m.raisons.slice(0, 3).map(r => r.texte).join(' · ') })),
-      h('div', { class: 'fin' }, h('span', { class: 'note', text: `${m.score} / ${m.seuil}` }))))
-      : [h('p', { class: 'vide', text: 'Aucune machine du réseau ne se comporte comme une machine compromise.' })]));
+      h('div', { class: 'fin' }, h('span', { class: 'note', text: `${m.score} / ${m.seuil}` })));
+    const videInternes = h('p', { class: 'vide', text: 'Aucune machine du réseau ne se comporte comme une machine compromise.' });
+    internes.replaceChildren(...(e.internes.length ? borner('machines', e.internes.map(ligneInterne)) : [videInternes]));
+    apercu('machines', e.internes.map(ligneInterne), videInternes);
+    // Les notes d'en-tête des aperçus : le compte, et le reste à voir.
+    for (const [k, el] of Object.entries(apercus)) { const n = compteurs[k] || 0; const note = el.parentElement?.querySelector('.note-apercu'); if (note) note.textContent = n > 5 ? `5 sur ${n}` : n ? `${n}` : ''; }
   }
   async function peindre() { etat = await api.get('/api/bouclier'); peindre_(); }
-  peindre_();
   suivre(peindre, 15000);
 
-  const page = h('div', { class: 'page' },
-    h('div', { class: 'headrow' },
-      h('div', {}, h('h1', { class: 'title', text: 'Bouclier' }), lede),
-      h('div', { class: 'actions' },
-        admin ? h('button', { class: 'btn', type: 'button', onclick: sur(async () => { const o = await api.post('/api/bouclier/listes/actualiser', {}); toast(o.faits.length ? `${o.faits.length} liste${o.faits.length > 1 ? 's' : ''} actualisée${o.faits.length > 1 ? 's' : ''}.` : 'Aucune liste téléchargée : voir les erreurs plus bas.', !o.faits.length); await peindre(); }) }, icone('liste', 15), 'Actualiser les listes') : null,
-        admin ? h('button', { class: 'btn solid', type: 'button', onclick: () => bloquer() }, icone('bouclier', 15), 'Bloquer une adresse') : null)),
-    figs, avis,
-    h('div', { class: 'split' },
-      h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Menaces extérieures' }), h('span', { class: 'note', text: 'score effacé de moitié chaque heure' })), menaces),
-      h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Blocages' }), h('span', { class: 'note' }, h('span', { class: 'row' }, h('span', { text: 'Historique' }), interrupteur(false, 'Historique des blocages', v => { tousBlocages = v; peindre_(); })))), blocages)),
-    h('div', { class: 'split mt12' },
-      h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Alertes de l’IPS' }), h('span', { class: 'note', text: 'les plus récentes' })), alertes),
-      h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Machines du réseau' }), h('span', { class: 'note', text: 'isolement : réaction rapide' })), internes)),
-    admin ? h('div', { class: 'grille mt12' },
-      carteMode(), carteUnifi(), carteSyslog(), carteListes(), carteBlanche(), carteExport(), carteSondes()) : null);
+  const carte = (titre, note, corps) => h('div', { class: 'card' }, h('header', {}, h('h2', { text: titre }), note), corps);
+  const carteApercu = (k, titre) => h('div', { class: 'card' }, h('header', {}, h('h2', { text: titre }), h('span', { class: 'row' }, h('span', { class: 'note note-apercu' }), voirPlus(k))), apercus[k]);
+  const retour = h('button', { class: 'btn sm flat', type: 'button', onclick: () => aller('bouclier') }, icone('retour', 14), 'Bouclier');
+  const tete = (titre, actions = []) => h('div', { class: 'headrow' },
+    h('div', {}, vue !== 'ensemble' ? h('div', { class: 'fil' }, retour) : null, h('h1', { class: 'title', text: titre }), vue === 'ensemble' ? lede : null),
+    h('div', { class: 'actions' }, ...actions));
+
+  let corps;
+  if (vue === 'ensemble') {
+    corps = [
+      tete('Bouclier', [
+        admin ? h('button', { class: 'btn', type: 'button', onclick: () => ouvrir('reglages') }, icone('reglages', 15), 'Réglages') : null,
+        admin ? h('button', { class: 'btn solid', type: 'button', onclick: () => bloquer() }, icone('bouclier', 15), 'Bloquer une adresse') : null]),
+      figs, avis,
+      h('div', { class: 'split' }, carteApercu('menaces', 'Menaces extérieures'), carteApercu('machines', 'Machines du réseau')),
+      h('div', { class: 'split mt12' }, carteApercu('blocages', 'Blocages en cours'), carteApercu('alertes', 'Alertes de l’IPS'))];
+  } else if (vue === 'reglages') {
+    corps = [tete(TITRES.reglages, [h('button', { class: 'btn', type: 'button', onclick: sur(async () => { const o = await api.post('/api/bouclier/listes/actualiser', {}); toast(o.faits.length ? `${o.faits.length} liste${o.faits.length > 1 ? 's' : ''} actualisée${o.faits.length > 1 ? 's' : ''}.` : 'Aucune liste téléchargée : voir les erreurs plus bas.', !o.faits.length); await peindre(); }) }, icone('liste', 15), 'Actualiser les listes')]),
+      h('div', { class: 'grille' }, carteMode(), carteUnifi(), carteSyslog(), carteListes(), carteBlanche(), carteExport(), carteSondes())];
+  } else {
+    const panneau = {
+      menaces: () => carte('Toutes les menaces', h('span', { class: 'note', text: 'score effacé de moitié chaque heure' }), menaces),
+      blocages: () => carte('Blocages', h('span', { class: 'note' }, h('span', { class: 'row' }, h('span', { text: 'Historique' }), interrupteur(false, 'Historique des blocages', v => { tousBlocages = v; peindre_(); }))), blocages),
+      machines: () => carte('Machines du réseau', h('span', { class: 'note', text: 'isolement : réaction rapide' }), internes),
+      alertes: () => carte('Alertes de l’IPS', h('span', { class: 'note', text: 'les plus récentes' }), alertes),
+    }[vue]();
+    corps = [tete(TITRES[vue], [admin && vue === 'menaces' ? h('button', { class: 'btn solid', type: 'button', onclick: () => bloquer() }, icone('bouclier', 15), 'Bloquer une adresse') : null]), panneau];
+  }
+  const page = h('div', { class: 'page' }, ...corps);
+  peindre_();
   return page;
 
   // ---------- réglages ----------
