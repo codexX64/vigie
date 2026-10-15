@@ -35,6 +35,15 @@ ni le score.
   officielle d'UniFi ; une machine du réseau qui se comporte comme une
   machine compromise est signalée (et isolée seulement par la réaction
   rapide). Détail plus bas.
+- **Sentinelle.** Les journaux des hôtes du réseau (SSH, sudo, comptes, cron,
+  systemd, noyau, NAS Synology, Proxmox, serveurs web, Docker, Home Assistant,
+  Nextcloud, Vaultwarden, courrier, Wi-Fi, DHCP, DNS…) arrivent par le même
+  syslog ; un moteur de décodeurs et de règles en arbre — l'architecture
+  d'OSSEC, réécrite — donne à chaque ligne un niveau de 0 à 15 : force brute,
+  compte forcé, compte créé ou ajouté aux administrateurs, tâche planifiée
+  d'implant, écoute du réseau, outil de balayage web, service de sécurité
+  arrêté. Les alertes nourrissent le bouclier, lèvent des événements, et
+  défilent en direct dans l'interface. Détail plus bas.
 - **Rapport PDF** horodaté en un clic, écrit côté serveur sans dépendance.
 - **Diffusion.** Déclencheurs pour les workflows du Hub, billetterie au
   format ticket/v1 (Aselia), Telegram, et SYNAPSE pour la mémoire des audits.
@@ -104,6 +113,53 @@ Mise en route : relier le routeur dans MapMyLAN suffit pour les alertes de
 l'IPS et les blocages ; restent les deux règles du pare-feu (VIGIE → Bouclier
 → carte « Passerelle »), et, pour le pot de miel et les refus du pare-feu,
 les journaux de la passerelle (carte « Journaux de la passerelle »).
+
+## Sentinelle
+
+Le bouclier regarde la frontière ; la sentinelle regarde dedans. Chaque hôte
+qui envoie ses journaux au port syslog de VIGIE (rsyslog `*.* @@vigie:5514`,
+Synology « Envoi des journaux », Proxmox, Docker en `log-driver: syslog`,
+OpenWrt…) est lu ligne à ligne. L'architecture est celle des analyseurs
+d'événements classiques (OSSEC, Wazuh), réécrite de zéro et sans leur code :
+
+1. **Pré-décodage** : l'heure, l'hôte, le programme, le numéro de processus,
+   séparés du message (RFC 3164, RFC 5424, journald, ligne nue).
+2. **Décodeurs** : trente familles (sshd, dropbear, PAM, sudo, su, comptes,
+   login, systemd, cron, noyau, Synology DSM, Proxmox VE, nginx/Apache/Caddy,
+   Docker, Home Assistant, Nextcloud, Vaultwarden, Jellyfin, Grafana, Gitea,
+   Portainer, Postfix/Dovecot, FTP, Samba, fail2ban/CrowdSec, hostapd, DHCP,
+   dnsmasq/Pi-hole/unbound, OpenVPN/WireGuard) qui reconnaissent le *geste*
+   (mot de passe refusé, session ouverte, commande élevée, compte créé,
+   service arrêté, requête web…) et en tirent les champs : adresse source,
+   utilisateur, port, URL, statut, commande, groupe, interface.
+3. **Règles en arbre** (une centaine) : une racine par geste, des précisions
+   (compte d'administration, groupe sudo, URL d'attaque, service critique),
+   puis les règles composées — *n fois en t secondes, même adresse ou même
+   compte* (force brute, énumération de comptes, balayage, rafale de
+   plantages), *après telle autre alerte* (connexion réussie après une force
+   brute de la même adresse = compte forcé ; compte créé, tâche planifiée
+   modifiée ou écoute du réseau sur un hôte déjà signalé compromis), *première
+   fois vue* (adresse jamais vue pour cet utilisateur, nouvel appareil au
+   DHCP). Chaque ligne reçoit le niveau de la règle la plus haute : 3 une
+   connexion réussie, 5 un mot de passe refusé, 8 une première fois ou un
+   compte créé, 10 une force brute, 12 un compte forcé ou ajouté aux
+   administrateurs, 13-14 une compromission corrélée.
+4. **Ce que VIGIE en fait.** Les alertes (niveau 7 par défaut) sont gardées
+   trente jours ; au niveau 10, un événement est levé et diffusé (Hub,
+   Telegram, billetterie) ; l'adresse source extérieure prend des points dans
+   le bouclier (60 à 120 selon le niveau, elle finit bloquée) ; une machine
+   du réseau qui en attaque une autre, ou l'hôte qui montre des signes de
+   compromission, devient « machine suspecte » du bouclier (isolement par la
+   réaction rapide, sous ses règles). Les répétitions d'une même alerte sont
+   tues pendant un délai propre à chaque règle ; les comptages continuent.
+
+La page *Sentinelle* montre le direct (observations du bouclier et
+événements de la sentinelle, en flux), les alertes, les hôtes par exposition,
+les sources d'attaque, et un banc d'essai : coller une ligne de journal pour
+voir ce qu'elle en décode et quelle règle elle retient, sans rien retenir.
+Rien n'est installé sur les hôtes : la surveillance de l'intégrité des
+fichiers et la recherche de rootkits, qui demandent un agent, relèvent de
+NEXARC.
 
 ## Règles
 

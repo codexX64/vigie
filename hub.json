@@ -687,6 +687,62 @@
         "texte": "IPS, vers 192.0.2.2 (réseau interne) : Honeypot accessed",
         "sujet": "192.0.2.77"
       }
+    },
+    {
+      "id": "host.alert",
+      "name": "Alerte d'hôte (sentinelle)",
+      "description": "Les journaux d'un hôte montrent une force brute, un compte forcé, un compte créé, une élévation suspecte, une écoute du réseau… (niveau 10 et plus).",
+      "icon": "alert",
+      "group": "Sentinelle",
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/evenements",
+          "query": {
+            "type": "sentinelle",
+            "limite": "50"
+          }
+        },
+        "interval": "30s",
+        "items": "$",
+        "dedupeKey": "$.id"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "quand": {
+            "type": "integer"
+          },
+          "gravite": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "titre": {
+            "type": "string"
+          },
+          "texte": {
+            "type": "string"
+          },
+          "sujet": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "Ab3dEf6hIj9k",
+        "quand": 1791014400000,
+        "gravite": "eleve",
+        "type": "sentinelle",
+        "titre": "srv-web : force brute SSH : huit échecs de la même adresse en deux minutes",
+        "texte": "Niveau 10 (règle ssh.force-brute, sshd) — depuis 192.0.2.77 · compte root. Extrait : Failed password for root from 192.0.2.77 port 51234 ssh2",
+        "sujet": "srv-web"
+      }
     }
   ],
   "actions": [
@@ -951,6 +1007,65 @@
       }
     },
     {
+      "id": "sentinel.state",
+      "name": "État de la sentinelle",
+      "description": "Les journaux d'hôtes analysés : hôtes suivis et leur niveau d'exposition, alertes récentes (niveau 7 et plus), adresses sources d'attaque, règles les plus déclenchées.",
+      "icon": "alert",
+      "group": "Sentinelle",
+      "capability": "security.audit",
+      "risk": "read",
+      "idempotent": true,
+      "params": [],
+      "request": {
+        "method": "GET",
+        "path": "/api/sentinelle"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "actif": {
+            "type": "boolean"
+          },
+          "seuil": {
+            "type": "integer"
+          },
+          "hotes": {
+            "type": "array"
+          },
+          "recentes": {
+            "type": "array"
+          },
+          "bilan": {
+            "type": "object"
+          }
+        }
+      },
+      "sample": {
+        "actif": true,
+        "seuil": 7,
+        "hotes": [
+          {
+            "hote": "srv-web",
+            "lignes": 1240,
+            "alertes": 3,
+            "niveauMax": 10
+          }
+        ],
+        "recentes": [
+          {
+            "hote": "srv-web",
+            "regle": "ssh.force-brute",
+            "niveau": 10,
+            "srcip": "192.0.2.77",
+            "description": "force brute SSH : huit échecs de la même adresse en deux minutes"
+          }
+        ],
+        "bilan": {
+          "total": 3
+        }
+      }
+    },
+    {
       "id": "ip.block",
       "name": "Bloquer une adresse",
       "description": "Bloque une adresse extérieure à la frontière (passerelle UniFi et liste exportée). Jamais le réseau local, un DNS public, Cloudflare ni la liste blanche. Se lève dans VIGIE.",
@@ -1093,6 +1208,17 @@
       },
       "value": "$.actifs",
       "interval": "2m"
+    },
+    {
+      "id": "hotes.sentinelle",
+      "name": "Alertes d'hôtes (24 h)",
+      "kind": "gauge",
+      "request": {
+        "method": "GET",
+        "path": "/api/sentinelle"
+      },
+      "value": "$.bilan.total",
+      "interval": "2m"
     }
   ],
   "permissions": {
@@ -1117,7 +1243,7 @@
   },
   "ai": {
     "exposeActions": true,
-    "hints": "VIGIE audite la sécurité du réseau (règles Codex64, score sur 100 par domaine) et veille en continu. « État de la sécurité » pour le score et les priorités. Isoler un appareil coupe son accès au réseau : toujours demander validation. VIGIE refuse d’isoler la passerelle et les équipements d’infrastructure par le Hub, et n’agit que dans les plages déclarées dans MapMyLAN. Le bouclier (« État du bouclier ») lit les alertes de l'IPS de la passerelle UniFi et bloque seul les attaquants extérieurs ; « Bloquer une adresse » n'accepte qu'une adresse publique, hors liste blanche."
+    "hints": "VIGIE audite la sécurité du réseau (règles Codex64, score sur 100 par domaine) et veille en continu. « État de la sécurité » pour le score et les priorités. Isoler un appareil coupe son accès au réseau : toujours demander validation. VIGIE refuse d’isoler la passerelle et les équipements d’infrastructure par le Hub, et n’agit que dans les plages déclarées dans MapMyLAN. Le bouclier (« État du bouclier ») lit les alertes de l'IPS de la passerelle UniFi et bloque seul les attaquants extérieurs ; « Bloquer une adresse » n'accepte qu'une adresse publique, hors liste blanche. La sentinelle lit les journaux des hôtes (SSH, sudo, comptes, NAS, hyperviseur, web, conteneurs) reçus en syslog et leur donne un niveau de 0 à 15 : force brute, compte forcé, compte créé ou ajouté aux administrateurs, écoute du réseau, outil de balayage web."
   },
   "accounts": {
     "tokenKey": "HUB_ADMIN_TOKEN",

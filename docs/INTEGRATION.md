@@ -79,3 +79,24 @@ sous renfort, jamais un jeton.
 `bouclier.menace` (mode observation), `bouclier.interne` (critique),
 `bouclier.plafond` et `bouclier.passerelle` (élevé). Déclencheurs du Hub :
 « Adresse bloquée », « Machine du réseau suspecte ».
+
+## Sentinelle
+
+Les lignes reçues au syslog que le bouclier ne reconnaît pas (ni CEF, ni
+pare-feu, ni EVE) sont des journaux d'hôtes : elles vont à la sentinelle,
+sous le même filtre d'émetteurs.
+
+| Entrée | Qui | Ce qu'elle fait |
+|---|---|---|
+| syslog UDP/TCP 5514 | les hôtes (émetteurs déclarés) | journaux RFC 3164/5424, journald, Docker syslog |
+| `GET /api/sentinelle` | session, jeton du Hub, jeton dérivé | état : hôtes, alertes récentes, bilan 24 h, règles déclenchées |
+| `GET /api/sentinelle/alertes?niveau=&hote=&regle=&srcip=&depuis=&limite=` | idem | les alertes gardées (30 jours) |
+| `GET /api/sentinelle/regles` | idem | la table des règles (niveau, parente, répétition) |
+| `GET /api/sentinelle/flux` | session (SSE) | le direct : `event: bouclier` (observations) et `event: sentinelle` (événements), `Last-Event-ID` honoré |
+| `PUT /api/reglages/sentinelle` `{ actif, seuil, seuilEvenement, correler, retentionJours }` | administrateur | réglages |
+| `POST /api/sentinelle/essai` `{ ligne }` | administrateur | ce que la sentinelle ferait d'une ligne, sans rien retenir |
+
+Événement de veille : `sentinelle` (gravité faible 7-9, élevée 10-12,
+critique 13-15), une fois par six heures et par règle, hôte et source.
+Déclencheur du Hub : « Alerte d'hôte (sentinelle) » ; action « État de la
+sentinelle » ; sonde « Alertes d'hôtes (24 h) ».
