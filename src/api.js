@@ -58,12 +58,16 @@ const S = {
   unifi: { hote: T(253, { motif: /^[A-Za-z0-9.:-]{1,253}$/ }), port: E(1, 65535), fp: T(80), cle: T(200, { motif: /^[\x21-\x7e]{16,200}$/ }), retirer: B },
   sonde: { nom: T(40, { requis: true, motif: /^[a-z0-9][a-z0-9-]{0,39}$/ }) },
   eve: { evenements: { type: 'liste', max: 5000, de: { type: 'json', profondeur: 6 } } },
+  sentinelle: { actif: B, seuil: E(1, 15), seuilEvenement: E(1, 15), correler: B, retentionJours: E(1, 365) },
+  essaiSentinelle: { ligne: T(8192, { requis: true }) },
 };
 const Q = {
   audits: { limite: E(1, 200), statut: T(10, { parmi: ['termine', 'echec', 'en cours'] }) },
   evenements: { limite: E(1, 500), depuis: E(0, 8.64e15), type: T(30, { motif: /^[a-z.]{1,30}$/ }), min: T(10, { parmi: GRAVITES }) },
   constats: { appareil: T(64, { requis: true, motif: ID_APPAREIL }) },
   liste: { jeton: T(80) },
+  sentinelle: { limite: E(1, 1000), depuis: E(0, 8.64e15), niveau: E(0, 15), hote: T(253, { motif: /^[A-Za-z0-9._:-]{1,253}$/ }), regle: T(60, { motif: /^[a-z0-9.-]{1,60}$/ }), srcip: T(45, { motif: /^[0-9a-fA-F.:]{1,45}$/ }) },
+  flux: { depuis: E(0, 1e12) },
 };
 
 /** Le nom d'un jeton dérivé valide (cer_<nom>_<hmac>), ou null. Comparaison à temps constant. */
@@ -93,7 +97,7 @@ export function urlBilletterieSure(brute) {
   return net.isIPv4(hote) && LOCALES.check(hote, 'ipv4');
 }
 
-export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, diffusion, bouclier }) {
+export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, diffusion, bouclier, sentinelle }) {
   const r = new Routeur();
   const { portail, journal, limiteur } = socle;
 
@@ -249,6 +253,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     sources: sources.public(), memoire: memoire.public(),
     // Les sondes : leur nom et leur date, jamais l'empreinte de leur jeton.
     bouclier: { ...magasin.reglagePublic('bouclier'), sondes: (magasin.reglage('bouclier').sondes || []).map(({ nom, cree }) => ({ nom, cree })), listeBlancheDefaut: LISTE_BLANCHE_DEFAUT },
+    sentinelle: magasin.reglage('sentinelle'),
   });
   const admin = (ctx, renfort = false) => { if (appelant(ctx)) throw new ErreurHttp(403, 'Réservé à une session de VIGIE.'); return portail.exiger(ctx, { role: 'admin', renfort }); };
 
@@ -451,6 +456,27 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     ctx.res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'content-length': Buffer.byteLength(t) });
     ctx.res.end(t);
   }, { public: true, requete: Q.liste });
+
+  // ---- sentinelle : les journaux d'hôtes ----
+  r.get('/api/sentinelle', ctx => { acces(ctx, LECTURE); return sentinelle.etat(); });
+  r.get('/api/sentinelle/alertes', ctx => { acces(ctx, LECTURE); const q = ctx.q; return sentinelle.alertes({ limite: q.limite || 100, depuis: q.depuis || 0, niveau: q.niveau || 0, hote: q.hote || '', regle: q.regle || '', srcip: q.srcip || '' }); }, { requete: Q.sentinelle });
+  r.get('/api/sentinelle/regles', ctx => { acces(ctx, LECTURE); return sentinelle.regles(); });
+  r.put('/api/reglages/sentinelle', async ctx => {
+    const s = admin(ctx);
+    const b = await corps(ctx, S.sentinelle);
+    magasin.poserReglage('sentinelle', b);
+    sentinelle.rafraichir();
+    journal.ecrire({ acteur: s.compte, action: 'reglages.sentinelle', objet: 'sentinelle', ip: ctx.ip, details: b });
+    return magasin.reglage('sentinelle');
+  });
+  // Comme un banc d'essai de règles : ce que la sentinelle ferait d'une ligne, sans rien retenir.
+  r.post('/api/sentinelle/essai', async ctx => { admin(ctx); const b = await corps(ctx, S.essaiSentinelle); return sentinelle.essai(b.ligne); });
+  // Le direct : observations du bouclier et événements de la sentinelle, en flux (SSE), pour une session.
+  r.get('/api/sentinelle/flux', ctx => {
+    session(ctx);
+    const depuis = Number(ctx.q.depuis || ctx.req.headers['last-event-id'] || 0) || 0;
+    try { sentinelle.abonner(ctx.res, depuis); } catch (e) { throw new ErreurHttp(e.status || 500, e.message); }
+  }, { requete: Q.flux });
 
   return {
     async traiter(ctx) {

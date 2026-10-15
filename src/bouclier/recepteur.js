@@ -11,9 +11,9 @@ const LIGNE_MAX = 16 * 1024;
 const PAR_SECONDE = 3000;
 
 export class Recepteur {
-  constructor({ port, hote = '0.0.0.0', emetteurs = () => [], surObservation, log = console, maintenant = () => Date.now() }) {
-    Object.assign(this, { port, hote, emetteurs, surObservation, log, maintenant });
-    this.stats = { recues: 0, lues: 0, refusees: 0, ignorees: 0, debordees: 0, derniere: null, parEmetteur: {}, dernierRefus: null };
+  constructor({ port, hote = '0.0.0.0', emetteurs = () => [], surObservation, surLigne = null, log = console, maintenant = () => Date.now() }) {
+    Object.assign(this, { port, hote, emetteurs, surObservation, surLigne, log, maintenant });
+    this.stats = { recues: 0, lues: 0, hotes: 0, refusees: 0, ignorees: 0, debordees: 0, derniere: null, parEmetteur: {}, dernierRefus: null };
     this.fenetre = { t: 0, n: 0 };
   }
 
@@ -36,10 +36,16 @@ export class Recepteur {
     // Le dernier émetteur refusé est montré : derrière un relais de Docker, la passerelle peut arriver sous une autre adresse.
     if (!this.autorise(emetteur)) { this.stats.refusees++; this.stats.dernierRefus = emetteur; return; }
     const o = lireLigne(texte.slice(0, LIGNE_MAX), `syslog:${emetteur}`, t);
-    if (!o) { this.stats.ignorees++; return; }
+    this.stats.parEmetteur[emetteur] = t;
+    if (!o) {
+      // Pas une ligne de passerelle ni de sonde : un journal d'hôte, pour la sentinelle.
+      let lue = false;
+      if (this.surLigne) { try { lue = !!this.surLigne(texte.slice(0, LIGNE_MAX), emetteur, t); } catch (e) { this.log.warn?.(`[syslog] ${e.message}`); } }
+      if (lue) { this.stats.hotes++; this.stats.derniere = t; } else this.stats.ignorees++;
+      return;
+    }
     this.stats.lues++;
     this.stats.derniere = t;
-    this.stats.parEmetteur[emetteur] = t;
     try { this.surObservation(o); } catch (e) { this.log.warn?.(`[syslog] ${e.message}`); }
   }
 

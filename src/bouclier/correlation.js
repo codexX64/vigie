@@ -95,6 +95,21 @@ export class Correlateur {
     for (const l of this.menaces?.ipListee(a.ip) || []) this.ajouter(a, l.poids, `listée par ${l.nom} (${l.sujet})`, o, `liste:${l.id}`);
   }
 
+  /**
+   * Des points venus d'ailleurs que des capteurs réseau (la sentinelle, par
+   * exemple) : même mémoire, même seuil, même riposte. Une adresse extérieure
+   * est contrôlée contre les listes au passage.
+   */
+  noter(ip, { interne = false, points, raison, cle = raison, observation = null } = {}) {
+    if (!ip || !(points > 0)) return null;
+    if (interne ? !estInterne(ip) : !estPublique(ip)) return null;
+    const a = this.etat(ip, interne);
+    if (!interne) this.listes(a, observation);
+    this.ajouter(a, points, raison, observation, cle);
+    this.compteurs[observation?.type || 'externe'] = (this.compteurs[observation?.type || 'externe'] || 0) + 1;
+    return { ip, score: Math.round(a.score), verdict: a.verdict };
+  }
+
   observer(o) {
     if (!o) return;
     this.compteurs[o.type] = (this.compteurs[o.type] || 0) + 1;

@@ -32,9 +32,16 @@ export class Bouclier {
     this.correlateur = new Correlateur({ menaces: this.menaces, reglage, maintenant, surVerdict: v => this.surVerdict(v).catch(e => log.warn?.(`[bouclier] ${e.message}`)) });
     this.recepteur = new Recepteur({
       port: cfg.syslogPort, emetteurs: () => reglage().emetteurs, log, maintenant,
-      surObservation: o => { if (o.type === 'ips') this.derniereIpsSyslog = this.maintenant(); this.correlateur.observer(o); },
+      surObservation: o => { if (o.type === 'ips') this.derniereIpsSyslog = this.maintenant(); this.correlateur.observer(o); this.sentinelle?.observation(o); },
     });
     this.sondes = {};
+    this.sentinelle = null;
+  }
+
+  /** La sentinelle lit les lignes de journaux d'hôtes que le bouclier ne reconnaît pas, et reçoit ses observations en flux. */
+  brancher(sentinelle) {
+    this.sentinelle = sentinelle;
+    this.recepteur.surLigne = (texte, emetteur, t) => sentinelle.ligne(texte, emetteur, t);
   }
 
   async surVerdict(v) {

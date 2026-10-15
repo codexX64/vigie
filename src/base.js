@@ -52,6 +52,13 @@ export function ouvrirBase(dossier) {
       resultat TEXT NOT NULL DEFAULT '', annulee_par TEXT, annulee_le INTEGER);
     CREATE TABLE IF NOT EXISTS ia_usage(jour TEXT PRIMARY KEY, appels INTEGER NOT NULL, jetons INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS reglages(cle TEXT PRIMARY KEY, valeur TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS sentinelle_alertes(
+      id TEXT PRIMARY KEY, quand INTEGER NOT NULL, hote TEXT NOT NULL DEFAULT '', programme TEXT NOT NULL DEFAULT '',
+      regle TEXT NOT NULL, niveau INTEGER NOT NULL, groupes TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '',
+      srcip TEXT NOT NULL DEFAULT '', utilisateur TEXT NOT NULL DEFAULT '', champs TEXT NOT NULL DEFAULT '{}', extrait TEXT NOT NULL DEFAULT '');
+    CREATE INDEX IF NOT EXISTS sentinelle_alertes_quand ON sentinelle_alertes(quand);
+    CREATE INDEX IF NOT EXISTS sentinelle_alertes_hote ON sentinelle_alertes(hote, quand);
+    CREATE TABLE IF NOT EXISTS sentinelle_vus(cle TEXT PRIMARY KEY, quand INTEGER NOT NULL);
   `);
   return db;
 }
@@ -81,6 +88,11 @@ export const DEFAUTS = {
     listes: {}, listesPropres: [], listesHeures: 6, listeBlanche: [], emetteurs: [], sondes: [],
     unifiHote: '', unifiPort: 443, unifiFp: '', cleUnifi: null, jetonListe: null,
   },
+  // La sentinelle : l'analyse des journaux d'hôtes reçus en syslog (src/sentinelle).
+  // seuil : niveau (0-15) à partir duquel une alerte est retenue ; seuilEvenement :
+  // niveau à partir duquel elle devient un événement de VIGIE (diffusé) ;
+  // correler : les alertes nourrissent le bouclier (score des adresses).
+  sentinelle: { actif: true, seuil: 7, seuilEvenement: 10, correler: true, retentionJours: 30 },
 };
 const SCELLES = { ia: ['cle'], docker: ['jeton'], billetterie: ['cle'], telegram: ['jeton'], bouclier: ['cleUnifi', 'jetonListe'] };
 
@@ -208,6 +220,43 @@ export class Magasin {
   }
   /** Les isolements automatiques de la dernière heure : la réaction rapide est bornée. */
   automatiquesRecentes(ms = 3600e3) { return this.db.prepare('SELECT COUNT(*) n FROM actions WHERE automatique = 1 AND quand > ?').get(Date.now() - ms).n; }
+
+  // ---- sentinelle : alertes des journaux d'hôtes, mémoire « première fois » ----
+  sentinelleAlerte(a) {
+    const id = nouvelleRef();
+    this.db.prepare('INSERT INTO sentinelle_alertes(id, quand, hote, programme, regle, niveau, groupes, description, srcip, utilisateur, champs, extrait) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, a.quand, String(a.hote || '').slice(0, 253), String(a.programme || '').slice(0, 64), a.regle, a.niveau, (a.groupes || []).join(','), String(a.description || '').slice(0, 300),
+        String(a.champs?.srcip || '').slice(0, 45), String(a.champs?.utilisateur || '').slice(0, 64), JSON.stringify(a.champs || {}).slice(0, 2000), String(a.extrait || '').slice(0, 512));
+    return id;
+  }
+  ligneSentinelle(l) {
+    return l && { id: l.id, quand: l.quand, hote: l.hote, programme: l.programme, regle: l.regle, niveau: l.niveau, groupes: l.groupes ? l.groupes.split(',') : [], description: l.description,
+      srcip: l.srcip, utilisateur: l.utilisateur, champs: json(l.champs, {}), extrait: l.extrait };
+  }
+  sentinelleAlertes({ limite = 100, depuis = 0, niveau = 0, hote = '', regle = '', srcip = '' } = {}) {
+    const cond = ['quand >= ?', 'niveau >= ?'], args = [depuis, niveau];
+    if (hote) { cond.push('hote = ?'); args.push(hote); }
+    if (regle) { cond.push('regle = ?'); args.push(regle); }
+    if (srcip) { cond.push('srcip = ?'); args.push(srcip); }
+    return this.db.prepare(`SELECT * FROM sentinelle_alertes WHERE ${cond.join(' AND ')} ORDER BY quand DESC LIMIT ?`).all(...args, limite).map(l => this.ligneSentinelle(l));
+  }
+  /** Comptes par niveau et par hôte sur une période : le tableau de bord. */
+  sentinelleBilan(depuis) {
+    return {
+      parNiveau: Object.fromEntries(this.db.prepare('SELECT niveau, COUNT(*) n FROM sentinelle_alertes WHERE quand >= ? GROUP BY niveau').all(depuis).map(x => [x.niveau, x.n])),
+      parHote: this.db.prepare('SELECT hote, COUNT(*) n, MAX(niveau) niveau FROM sentinelle_alertes WHERE quand >= ? GROUP BY hote ORDER BY niveau DESC, n DESC LIMIT 100').all(depuis),
+      parRegle: this.db.prepare('SELECT regle, COUNT(*) n, MAX(niveau) niveau FROM sentinelle_alertes WHERE quand >= ? GROUP BY regle ORDER BY n DESC LIMIT 60').all(depuis),
+      parSource: this.db.prepare("SELECT srcip, COUNT(*) n, MAX(niveau) niveau FROM sentinelle_alertes WHERE quand >= ? AND srcip <> '' GROUP BY srcip ORDER BY niveau DESC, n DESC LIMIT 60").all(depuis),
+      total: this.db.prepare('SELECT COUNT(*) n FROM sentinelle_alertes WHERE quand >= ?').get(depuis).n,
+    };
+  }
+  sentinellePurger(jours) {
+    const n = this.db.prepare('DELETE FROM sentinelle_alertes WHERE quand < ?').run(Date.now() - jours * 86400e3).changes;
+    this.db.prepare('DELETE FROM sentinelle_vus WHERE quand < ?').run(Date.now() - 180 * 86400e3);
+    return n;
+  }
+  sentinelleVu(cle) { return !!this.db.prepare('SELECT 1 FROM sentinelle_vus WHERE cle = ?').get(cle); }
+  sentinelleNoterVu(cle) { this.db.prepare('INSERT INTO sentinelle_vus(cle, quand) VALUES(?, ?) ON CONFLICT(cle) DO UPDATE SET quand = excluded.quand').run(cle, Date.now()); }
 
   // ---- compteurs de l'IA (plafond quotidien) ----
   usageIA(jour = new Date().toISOString().slice(0, 10)) { return this.db.prepare('SELECT appels, jetons FROM ia_usage WHERE jour = ?').get(jour) || { appels: 0, jetons: 0 }; }

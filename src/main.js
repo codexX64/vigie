@@ -13,6 +13,7 @@ import { Diffusion } from './diffusion.js';
 import { Moteur } from './veille.js';
 import { creerApi } from './api.js';
 import { Bouclier } from './bouclier/index.js';
+import { SentinelleVigie } from './sentinelle/index.js';
 import {
   Debit, ErreurHttp, demarrerSocle, entetesSecurite, envelopper, nonceCsp, politiqueContenu,
   repondreErreur, repondreJson, servirFichier, cheminVersionne,
@@ -49,8 +50,11 @@ export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = gl
   const diffusion = new Diffusion({ magasin, fetch: f, tgApi: cfg.tgApi, urlPublique: socle.cfg.urlPublique || '' });
   const moteur = new Moteur({ magasin, sources, ia, memoire, diffusion, journal: socle.journal, log });
   const bouclier = new Bouclier({ cfg, db, magasin, moteur, sources, journal: socle.journal, fetch: fetchMenaces, log });
-  const api = creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, diffusion, bouclier });
+  const sentinelle = new SentinelleVigie({ magasin, moteur, bouclier, log });
+  bouclier.brancher(sentinelle);
+  const api = creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, diffusion, bouclier, sentinelle });
   moteur.demarrer();
+  sentinelle.demarrer();
   await bouclier.demarrer();
 
   const debit = new Debit({ max: 900 });
@@ -82,9 +86,9 @@ export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = gl
   log.info?.(`VIGIE ${VERSION} à l’écoute sur ${cfg.hote}:${serveur.address().port}`);
 
   return {
-    serveur, db, socle, magasin, moteur, sources, ia, memoire, diffusion, api, bouclier, port: serveur.address().port,
+    serveur, db, socle, magasin, moteur, sources, ia, memoire, diffusion, api, bouclier, sentinelle, port: serveur.address().port,
     async arreter() {
-      bouclier.arreter();
+      bouclier.arreter(); sentinelle.arreter();
       await moteur.arreter(); memoire.arreter(); socle.arreter();
       await new Promise(r => serveur.close(r));
       db.close();
