@@ -103,6 +103,8 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
     else if (e.unifi.ok === false) notes.push(['warn', `La passerelle ne reçoit plus les blocages : ${e.unifi.erreur}`]);
     else if (e.unifi.regles && !e.unifi.regles.erreur && (!e.unifi.regles.entrant || !e.unifi.regles.sortant)) notes.push(['warn', `Listes envoyées, mais ${!e.unifi.regles.entrant && !e.unifi.regles.sortant ? 'aucune règle du pare-feu ne les cite' : `la règle ${!e.unifi.regles.entrant ? 'd’entrée' : 'de sortie'} manque`} : elles ne bloquent rien tant que les règles ne sont pas posées (Réglages → Passerelle).`]);
     if (e.mode !== 'actif') notes.push(['', e.mode === 'observer' ? 'Mode observation : VIGIE signale, ne bloque rien.' : 'Mode simulation : VIGIE note ce qu’il aurait bloqué, rien ne part vers la passerelle.']);
+    if (e.tempete && maintenant - e.tempete.quand < 10 * 60e3) notes.unshift(['warn', `Tempête en cours sur le port ${e.tempete.port} : ${e.tempete.sources} adresses, ${e.tempete.parMinute} paquets en une minute. Les plus bruyantes sont bloquées${e.cloudflare?.attaque ? ', Cloudflare est en mode Under Attack' : ''} ; au-delà, c’est Cloudflare ou le fournisseur d’accès.`]);
+    else if (e.cloudflare?.attaque) notes.unshift(['warn', `Cloudflare en mode Under Attack (${e.cloudflare.attaque.motif}) jusqu’à ${quand(e.cloudflare.attaque.jusqua)}.`]);
     avis.replaceChildren(...notes.slice(0, 1).map(([c, t]) => h('div', { class: 'card mb12' }, h('div', { class: 'notice' }, h('span', { class: `itile ${c ? 'g-eleve' : 'g-info'}` }, icone(c ? 'alerte' : 'oeil', 15)), h('div', {}, h('p', { text: t }))))));
 
     const ligneMenace = m => h('div', { class: 'flowrow', 'data-donnee': '' },
@@ -186,7 +188,7 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
       liens];
   } else if (vue === 'reglages') {
     corps = [tete(TITRES.reglages, [h('button', { class: 'btn', type: 'button', onclick: sur(async () => { const o = await api.post('/api/bouclier/listes/actualiser', {}); toast(o.faits.length ? `${o.faits.length} liste${o.faits.length > 1 ? 's' : ''} actualisée${o.faits.length > 1 ? 's' : ''}.` : 'Aucune liste téléchargée : voir les erreurs plus bas.', !o.faits.length); await peindre(); }) }, icone('liste', 15), 'Actualiser les listes')]),
-      h('div', { class: 'grille' }, carteMode(), carteUnifi(), carteSyslog(), carteListes(), carteBlanche(), carteExport(), carteSondes())];
+      h('div', { class: 'grille' }, carteMode(), carteUnifi(), carteCloudflare(), carteSyslog(), carteListes(), carteBlanche(), carteExport(), carteSondes())];
   } else {
     const panneau = {
       menaces: () => carte('Toutes les menaces', h('span', { class: 'note', text: 'score effacé de moitié chaque heure' }), menaces),
@@ -219,11 +221,13 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
     const parHeure = nombre(r.autoParHeure, 1, 2000, 'Blocages par heure');
     const max = nombre(r.maxUnifi, 10, 10000, 'Adresses sur la passerelle');
     const durees = h('input', { class: 'field mono', value: r.dureesMinutes.join(', '), 'aria-label': 'Durées' });
+    const tSources = nombre(r.tempeteSources, 5, 100000, 'Sources'), tLignes = nombre(r.tempeteLignes, 50, 1000000, 'Lignes'), tBlocages = nombre(r.tempeteBlocages, 0, 500, 'Blocages'), tMinutes = nombre(r.tempeteMinutes, 1, 1440, 'Minutes');
     const deux = (a, b) => h('div', { class: 'deux' }, a, b);
     const corps = () => ({
       mode: mode.value, seuil: Number(seuil.value), seuilInterne: Number(seuilInterne.value), demiVieMinutes: Number(demi.value),
       balayagePorts: Number(ports.value), balayageCibles: Number(cibles.value), forceBrute: Number(brute.value),
       autoParHeure: Number(parHeure.value), maxUnifi: Number(max.value), dureesMinutes: lignes(durees.value).map(Number),
+      tempeteSources: Number(tSources.value), tempeteLignes: Number(tLignes.value), tempeteBlocages: Number(tBlocages.value), tempeteMinutes: Number(tMinutes.value),
     });
     const sauver = enregistrer(corps, 'Bouclier enregistré.');
     return h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Mode et seuils' }), h('span', { class: 'note', text: r.mode })), h('div', { class: 'cardbody' },
@@ -235,6 +239,9 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
       h('label', { class: 'lbl mt9', text: 'Force brute : tentatives sur un port d’authentification en dix minutes' }), brute,
       h('label', { class: 'lbl mt9', text: 'Blocages automatiques par heure · adresses tenues par la passerelle' }), deux(parHeure, max),
       h('label', { class: 'lbl mt9', text: 'Durées des blocages successifs (minutes)' }), durees,
+      h('label', { class: 'lbl mt12', text: 'Tempête (déni de service) : sources distinctes sur un même port · lignes entrantes, en une minute' }), deux(tSources, tLignes),
+      h('label', { class: 'lbl mt9', text: 'En tempête : adresses les plus bruyantes bloquées d’emblée (hors plafond) · minutes de mode « Under Attack » Cloudflare' }), deux(tBlocages, tMinutes),
+      h('p', { class: 'hint', text: 'Au-delà de la frontière, un déni de service volumétrique sature la ligne avant la passerelle : il se traite en amont (Cloudflare pour ce qui passe par le tunnel, sinon le fournisseur d’accès). VIGIE le dit, bloque ce qu’il peut, et bascule Cloudflare si tu l’y autorises.' }),
       h('div', { class: 'actions mt12' }, h('button', { class: 'btn solid', type: 'button', onclick: async () => {
         if (mode.value === 'actif' && r.mode !== 'actif' && !(await confirmer('Laisser VIGIE bloquer seul ?', 'Une adresse extérieure qui dépasse le seuil sera coupée à la frontière sans attendre personne. Jamais une adresse du réseau local, jamais la liste blanche ; chaque blocage se lève en un clic.', { danger: true, oui: 'Passer en actif' }))) return;
         await sauver();
@@ -296,6 +303,50 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
           h('li', { text: '« VIGIE sortie » : action Block, zones sources internes, destination = le même groupe, zone External. Une machine infectée ne joint plus son serveur de commande.' }),
           h('li', { text: `Les deux mêmes pour « ${nom6} » si l’IPv6 est actif.` }),
           h('li', { text: 'Placer ces règles avant les règles d’autorisation, puis « Synchroniser » ici : VIGIE vérifie qu’elles existent.' })))));
+  }
+
+  function carteCloudflare() {
+    const r = reglages;
+    const c = etat.cloudflare || {};
+    const jeton = h('input', { class: 'field mono', type: 'password', placeholder: r.cloudflareJeton ? 'jeton enregistré — en coller un autre pour le remplacer' : 'jeton d’API Cloudflare', autocomplete: 'off', 'aria-label': 'Jeton Cloudflare' });
+    const zonesBoite = h('div', { class: 'mt9' });
+    let zonesLues = null;
+    const choisies = () => [...zonesBoite.querySelectorAll('input:checked')].map(x => ({ id: x.value, nom: x.dataset.nom }));
+    const peindreZones = (zones, cochees) => zonesBoite.replaceChildren(...(zones.length ? zones.map(z => h('label', { class: 'check' }, h('input', { type: 'checkbox', value: z.id, 'data-nom': z.nom, checked: cochees.some(x => x.id === z.id) }), ` ${z.nom}${z.offre ? ` (${z.offre})` : ''}`)) : [h('p', { class: 'hint', text: 'Aucune zone lisible avec ce jeton.' })]));
+    if ((r.cloudflareZones || []).length) peindreZones(r.cloudflareZones, r.cloudflareZones);
+    const sonder = sur(async () => {
+      const o = await api.post('/api/bouclier/cloudflare/sonde', jeton.value.trim() ? { jeton: jeton.value.trim() } : {});
+      zonesLues = o.zones; peindreZones(o.zones, r.cloudflareZones || []);
+      toast(`Jeton valable : ${o.zones.length} zone${o.zones.length > 1 ? 's' : ''}. Coche celles à protéger, puis enregistre.`);
+    });
+    const modeAuto = interrupteur(!!r.cloudflareModeAttaque, 'Mode Under Attack automatique en tempête', v => sur(async () => { await api.put('/api/reglages/bouclier', { cloudflareModeAttaque: v }); toast(v ? 'En tempête, Cloudflare passera en mode Under Attack.' : 'Plus de bascule automatique.'); })());
+    const a = c.attaque;
+    const etatTexte = !c.relie ? 'non relié' : c.ok === false ? 'erreur' : c.ok ? 'synchronisé' : 'relié';
+    return h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Cloudflare, en amont' }), h('span', { class: `note ${c.ok === false ? 'erreur' : ''}`, text: etatTexte })), h('div', { class: 'cardbody' },
+      h('p', { class: 'hint mt0', text: 'Les adresses bloquées vont aussi dans une liste de ton compte Cloudflare (« vigie_bloquees »), qu’une règle du pare-feu applicatif refuse sur chaque zone choisie : l’attaquant est coupé avant le tunnel. En tempête, VIGIE peut passer les zones en mode « Under Attack » (défi à chaque visiteur) le temps réglé.' }),
+      c.relie ? h('div', { class: 'etat-unifi' },
+        h('small', { text: c.ok ? `${c.envoyees ?? 0} adresse${c.envoyees > 1 ? 's' : ''} dans la liste · ${quand(c.synchro)}` : c.erreur || 'pas encore synchronisé' }),
+        (c.zones || []).length ? h('small', { text: `Zones : ${c.zones.map(z => `${z.nom}${z.regle ? '' : ' (règle manquante' + (z.erreur ? ' : ' + z.erreur : '') + ')'}`).join(', ')}` }) : h('small', { class: 'erreur-texte', text: 'Aucune zone choisie : la liste existe mais rien ne la refuse.' }),
+        a ? h('small', { class: 'erreur-texte', text: `Mode Under Attack en cours (${a.motif}) jusqu’à ${quand(a.jusqua)}` }) : null) : null,
+      h('label', { class: 'lbl mt9', text: 'Jeton d’API — Cloudflare → Mon profil → Jetons d’API → Créer : Compte → Listes de filtres : Modifier · Zone → Zone : Lire · Zone → Pare-feu WAF : Modifier · Zone → Paramètres de zone : Modifier' }), jeton,
+      h('div', { class: 'actions mt9' }, h('button', { class: 'btn sm', type: 'button', onclick: sonder }, 'Lire les zones')),
+      h('label', { class: 'lbl mt9', text: 'Zones protégées' }), zonesBoite,
+      h('div', { class: 'reglage-ligne' }, h('div', {}, h('strong', { text: 'Mode « Under Attack » automatique' }), h('small', { text: 'En tempête, pour la durée réglée dans « Mode et seuils » ; l’ancien niveau de sécurité revient ensuite.' })), c.relie ? modeAuto : h('span', { class: 'note', text: 'relier d’abord' })),
+      h('div', { class: 'actions mt12' },
+        h('button', { class: 'btn solid', type: 'button', onclick: sur(async () => {
+          const corps = { ...(jeton.value.trim() ? { jeton: jeton.value.trim() } : {}), ...(zonesLues || (r.cloudflareZones || []).length ? { zones: choisies() } : {}) };
+          if (!corps.jeton && !r.cloudflareJeton) throw new Error('Colle d’abord un jeton.');
+          await api.put('/api/bouclier/cloudflare', corps); toast('Cloudflare enregistré et synchronisé.'); await recharger();
+        }) }, 'Enregistrer'),
+        c.relie ? h('button', { class: 'btn', type: 'button', onclick: sur(async () => { await api.post('/api/bouclier/cloudflare/synchroniser', {}); toast('Liste resynchronisée.'); await recharger(); }) }, 'Resynchroniser') : null,
+        c.relie && (c.zones || []).length ? h('button', { class: `btn ${a ? '' : 'danger'}`, type: 'button', onclick: sur(async () => {
+          if (!a && !(await confirmer('Passer en mode Under Attack ?', 'Chaque visiteur des zones choisies verra un défi de 5 secondes pendant 15 minutes. À réserver à une attaque en cours.', { danger: true, oui: 'Passer' }))) return;
+          await api.post('/api/bouclier/cloudflare/attaque', { actif: !a, minutes: 15 }); toast(a ? 'Mode Under Attack levé.' : 'Mode Under Attack posé pour 15 minutes.'); await recharger();
+        }) }, a ? 'Lever le mode Under Attack' : 'Under Attack 15 min') : null,
+        c.relie ? h('button', { class: 'btn sm flat', type: 'button', onclick: sur(async () => {
+          if (!(await confirmer('Délier Cloudflare ?', 'Le jeton est effacé de VIGIE ; la liste et la règle restent dans Cloudflare telles quelles.', { danger: true, oui: 'Délier' }))) return;
+          await api.put('/api/bouclier/cloudflare', { retirer: true }); toast('Cloudflare délié.'); await recharger();
+        }) }, 'Délier') : null)));
   }
 
   function carteSyslog() {

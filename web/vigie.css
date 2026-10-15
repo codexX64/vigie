@@ -162,3 +162,5 @@ pre.conf{white-space:pre-wrap;font-size:12px;background:var(--well);border-radiu
 .ligne-courte .tronque{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ligne-courte b.mono{font-size:12px;font-weight:500}
 .liens-detail{margin-top:12px;gap:8px;flex-wrap:wrap}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-soft);cursor:pointer;min-width:0;padding:4px 0}
+.check input{accent-color:var(--accent)}
