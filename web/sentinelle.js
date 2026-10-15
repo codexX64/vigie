@@ -92,7 +92,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
     if (!e.actif) notes.push(['warn', 'La sentinelle est éteinte : les journaux d’hôtes reçus sont ignorés.']);
     else if (!e.hotes.length) notes.push(['', 'Aucun journal d’hôte reçu. Envoie les journaux de tes machines (rsyslog, journald, NAS, hyperviseur, routeur) au port syslog de VIGIE : carte « Brancher un hôte » plus bas.']);
     if (e.hotes.some(x => x.niveauMax >= 12)) notes.push(['warn', `Signes de compromission sur ${e.hotes.filter(x => x.niveauMax >= 12).map(x => x.hote).join(', ')} : voir les alertes, puis le Bouclier (machines du réseau).`]);
-    avis.replaceChildren(...notes.map(([c, t]) => h('div', { class: 'card mb12' }, h('div', { class: 'notice' }, h('span', { class: `itile ${c ? 'g-eleve' : 'g-info'}` }, icone(c ? 'alerte' : 'oeil', 15)), h('div', {}, h('p', { text: t }))))));
+    avis.replaceChildren(...notes.slice(0, 1).map(([c, t]) => h('div', { class: 'card mb12' }, h('div', { class: 'notice' }, h('span', { class: `itile ${c ? 'g-eleve' : 'g-info'}` }, icone(c ? 'alerte' : 'oeil', 15)), h('div', {}, h('p', { text: t }))))));
 
     alertes.replaceChildren(...(e.recentes.length ? e.recentes.slice(0, 40).map(a => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile g-${GRAV(a.niveau)}` }, icone(a.niveau >= 10 ? 'eclair' : 'alerte', 15)),
@@ -135,8 +135,12 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
   const apercuAlertes = h('div', {}), apercuHotes = h('div', {});
   const noteAlertes = h('span', { class: 'note' }), noteHotes = h('span', { class: 'note' });
   const peindreApercus = () => {
-    apercuAlertes.replaceChildren(...[...alertes.children].slice(0, 5).map(x => x.cloneNode(true)));
-    apercuHotes.replaceChildren(...[...hotes.children].slice(0, 5).map(x => x.cloneNode(true)));
+    apercuAlertes.replaceChildren(...(etat.recentes.length ? etat.recentes.slice(0, 5).map(a => h('div', { class: 'ligne-courte' },
+      h('span', { class: `pastille g-${GRAV(a.niveau)}` }), h('strong', { text: a.hote || '?' }), h('span', { class: 'tronque', text: a.description }), chip(a.niveau)))
+      : [h('p', { class: 'vide', text: 'Aucune alerte.' })]));
+    apercuHotes.replaceChildren(...(etat.hotes.length ? etat.hotes.slice(0, 5).map(x => h('div', { class: 'ligne-courte' },
+      h('span', { class: `pastille g-${x.niveauMax ? GRAV(x.niveauMax) : 'safe'}` }), h('strong', { class: 'ip', text: x.hote }), h('span', { class: 'tronque', text: `${pluriel(x.alertes, 'alerte')} · ${depuis(x.dernier)}` }), x.niveauMax ? chip(x.niveauMax) : h('span', { class: 'note', text: 'calme' })))
+      : [h('p', { class: 'vide', text: 'Aucun hôte.' })]));
     const n = (x, total) => (total > 5 ? `5 sur ${total}` : total ? String(total) : '');
     noteAlertes.textContent = n(0, etat.recentes.length); noteHotes.textContent = n(0, etat.hotes.length);
   };
