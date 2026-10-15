@@ -689,6 +689,62 @@
       }
     },
     {
+      "id": "storm.detected",
+      "name": "Tempête (déni de service)",
+      "description": "Des dizaines d'adresses frappent le même port en une minute : les plus bruyantes sont bloquées, Cloudflare peut passer en mode Under Attack ; au-delà, c'est l'amont.",
+      "icon": "alert",
+      "group": "Bouclier",
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/evenements",
+          "query": {
+            "type": "bouclier.tempete",
+            "limite": "20"
+          }
+        },
+        "interval": "30s",
+        "items": "$",
+        "dedupeKey": "$.id"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "quand": {
+            "type": "integer"
+          },
+          "gravite": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "titre": {
+            "type": "string"
+          },
+          "texte": {
+            "type": "string"
+          },
+          "sujet": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "Ab3dEf6hIj9k",
+        "quand": 1791014400000,
+        "gravite": "critique",
+        "type": "bouclier.tempete",
+        "titre": "Tempête sur le port 443 : 120 adresses, 4 800 paquets en une minute",
+        "texte": "20 adresses les plus bruyantes bloquées à la frontière · Cloudflare en mode Under Attack. Au-delà de la frontière, un déni de service volumétrique se traite en amont.",
+        "sujet": "port 443"
+      }
+    },
+    {
       "id": "host.alert",
       "name": "Alerte d'hôte (sentinelle)",
       "description": "Les journaux d'un hôte montrent une force brute, un compte forcé, un compte créé, une élévation suspecte, une écoute du réseau… (niveau 10 et plus).",
@@ -1066,6 +1122,54 @@
       }
     },
     {
+      "id": "cloudflare.attack",
+      "name": "Mode Under Attack Cloudflare",
+      "description": "Pose ou lève le mode « Under Attack » (défi à chaque visiteur) sur les zones Cloudflare que VIGIE protège, pour un temps. À réserver à une attaque en cours.",
+      "icon": "alert",
+      "group": "Bouclier",
+      "capability": "security.audit",
+      "risk": "reversible",
+      "idempotent": true,
+      "params": [
+        {
+          "key": "actif",
+          "label": "Poser (true) ou lever (false)",
+          "type": "boolean",
+          "required": true
+        },
+        {
+          "key": "minutes",
+          "label": "Durée en minutes (vide : 15)",
+          "type": "string",
+          "default": "",
+          "pattern": "^(\\d{1,4})?$"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/bouclier/cloudflare/attaque",
+        "body": {
+          "actif": "{{params.actif}}",
+          "minutes": "{{params.minutes}}"
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "attaque": {
+            "type": "object"
+          }
+        }
+      },
+      "sample": {
+        "attaque": {
+          "depuis": 1791014400000,
+          "jusqua": 1791015300000,
+          "motif": "à la main"
+        }
+      }
+    },
+    {
       "id": "ip.block",
       "name": "Bloquer une adresse",
       "description": "Bloque une adresse extérieure à la frontière (passerelle UniFi et liste exportée). Jamais le réseau local, un DNS public, Cloudflare ni la liste blanche. Se lève dans VIGIE.",
@@ -1238,7 +1342,8 @@
       "rules.emergingthreats.net",
       "cinsscore.com",
       "lists.blocklist.de",
-      "cdn.jsdelivr.net"
+      "cdn.jsdelivr.net",
+      "api.cloudflare.com"
     ]
   },
   "ai": {

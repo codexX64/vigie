@@ -109,6 +109,25 @@ Chaque blocage se lève en un clic. Les blocages vont :
 - dans une liste texte (`/api/bouclier/liste.txt`, jeton dédié) pour un autre
   pare-feu qui lit une URL (pfSense, OPNsense, MikroTik).
 
+**La tempête.** Un déni de service distribué n'est pas une adresse de plus :
+c'est des dizaines d'adresses sur le même port en une minute. VIGIE compte
+les sources distinctes par port et le débit de lignes entrantes ; au-delà des
+seuils (40 sources et 600 lignes par minute, réglables), il lève un événement
+critique « Tempête sur le port X », bloque d'emblée les adresses les plus
+bruyantes (hors plafond horaire : c'est précisément le moment), et, si tu l'y
+as autorisé, passe tes zones Cloudflare en mode « Under Attack » pour un
+temps. Il dit aussi ce qu'il ne peut pas : un flot qui sature la fibre
+s'arrête en amont (Cloudflare, fournisseur d'accès), jamais sur la passerelle.
+
+**Cloudflare, en amont.** Avec un jeton d'API (Compte → Listes de filtres :
+Modifier ; Zone → Zone : Lire ; Zone → Pare-feu WAF : Modifier ; Zone →
+Paramètres de zone : Modifier), VIGIE tient dans ton compte une liste
+`vigie_bloquees` — les mêmes adresses que sur la passerelle, IPv6 en /64 —
+et pose sur chaque zone choisie une règle du pare-feu applicatif qui la
+refuse : un attaquant bloqué chez toi l'est aussi avant le tunnel. Le mode
+« Under Attack » se pose et se lève à la main, ou seul en tempête, et
+l'ancien niveau de sécurité revient à l'échéance.
+
 Mise en route : relier le routeur dans MapMyLAN suffit pour les alertes de
 l'IPS et les blocages ; restent les deux règles du pare-feu (VIGIE → Bouclier
 → carte « Passerelle »), et, pour le pot de miel et les refus du pare-feu,

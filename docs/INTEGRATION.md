@@ -72,13 +72,22 @@ tant que la passerelle en envoie par syslog), `PUT /api/passerelle/bouclier`
 `{ ips }` (les adresses bloquées, à chaque changement). Une clé d'API UniFi
 posée dans VIGIE passe avant MapMyLAN.
 
+| `POST /api/bouclier/cloudflare/sonde` `{ jeton? }` | administrateur | compte et zones lisibles avec le jeton (posé, ou nouveau) |
+| `PUT /api/bouclier/cloudflare` `{ jeton?, zones?: [{id, nom}], retirer? }` | administrateur sous renfort | relier Cloudflare, choisir les zones, délier |
+| `POST /api/bouclier/cloudflare/synchroniser` | administrateur | renvoyer la liste et reposer les règles |
+| `POST /api/bouclier/cloudflare/attaque` `{ actif, minutes? }` | administrateur sous renfort | mode « Under Attack » sur les zones, pour un temps |
+
 Réglages, passerelle, jetons de sonde et de liste : session d'administrateur
-sous renfort, jamais un jeton.
+sous renfort, jamais un jeton. Chez Cloudflare (`api.cloudflare.com`) : liste
+`vigie_bloquees` du compte, règle « ip.src in $vigie_bloquees » dans la phase
+`http_request_firewall_custom` de chaque zone, réglage `security_level`.
 
 Événements de veille : `bouclier.bloque` (faible), `bouclier.simule`,
 `bouclier.menace` (mode observation), `bouclier.interne` (critique),
-`bouclier.plafond` et `bouclier.passerelle` (élevé). Déclencheurs du Hub :
-« Adresse bloquée », « Machine du réseau suspecte ».
+`bouclier.plafond`, `bouclier.passerelle` et `bouclier.cloudflare` (élevé),
+`bouclier.tempete` (critique). Déclencheurs du Hub : « Adresse bloquée »,
+« Machine du réseau suspecte », « Tempête (déni de service) » ; action « Mode
+Under Attack Cloudflare ».
 
 ## Sentinelle
 
