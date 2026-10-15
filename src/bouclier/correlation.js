@@ -42,8 +42,10 @@ export function semblableDga(domaine) {
 }
 
 export class Correlateur {
-  constructor({ menaces, reglage = () => ({}), surVerdict = () => {}, maintenant = () => Date.now() }) {
-    Object.assign(this, { menaces, reglage, surVerdict, maintenant });
+  constructor({ menaces, reglage = () => ({}), surVerdict = () => {}, surTempete = () => {}, maintenant = () => Date.now() }) {
+    Object.assign(this, { menaces, reglage, surVerdict, surTempete, maintenant });
+    // La tempête : ce qui entre, compté par minute et par port, et les sources distinctes.
+    this.tempete = { debut: 0, lignes: 0, parPort: new Map(), dernieres: new Map(), courante: null };
     this.adresses = new Map();      // ip → { score, maj, raisons[], premier, interne, alerte, ports:Map, cibles:Map, auth, verdict }
     this.recentes = [];             // dernières alertes IPS, pour l'interface
     this.compteurs = {};            // type → nombre d'observations
@@ -123,7 +125,7 @@ export class Correlateur {
       const p = POINTS_IPS[o.gravite] ?? 10;
       const sig = `${o.signature || 'alerte'}${o.sid ? ` (sid ${o.sid})` : ''}`;
       const compromission = COMPROMISSION.test(`${o.signature} ${o.categorie}`);
-      if (ext(o.src)) { const a = this.etat(o.src, false); this.listes(a, o); this.ajouter(a, p, `IPS : ${sig}`, o, `ips:${o.sid || o.signature}`); }
+      if (ext(o.src)) { this.compterTempete(o, t); const a = this.etat(o.src, false); this.listes(a, o); this.ajouter(a, p, `IPS : ${sig}`, o, `ips:${o.sid || o.signature}`); }
       if (ext(o.dst) && (int(o.src) || !o.src)) {
         // Une machine du réseau qui parle à l'extérieur et déclenche une signature
         // de compromission : l'extérieur est son serveur de commande.
@@ -141,6 +143,7 @@ export class Correlateur {
       const entrant = ext(o.src) && !ext(o.dst);
       const sortant = int(o.src) && ext(o.dst);
       if (entrant) {
+        this.compterTempete(o, t);
         const a = this.etat(o.src, false);
         this.listes(a, o);
         if (o.action === 'bloque') this.ajouter(a, 2, 'paquets refusés par le pare-feu', o, 'pf-refus');
@@ -171,6 +174,36 @@ export class Correlateur {
         this.ajouter(this.etat(o.src, true), 5, `noms générés par algorithme (ex. ${o.domaine})`, o, 'dga');
       }
     }
+  }
+
+  /**
+   * La tempête : beaucoup d'adresses distinctes qui frappent le même port en
+   * une minute, et un débit de lignes bien au-dessus de l'ordinaire. Un
+   * blocage par adresse ne suffit plus ; on le dit, et on bloque les plus
+   * bruyantes d'abord. Fenêtre d'une minute, un signalement par port et par
+   * dix minutes, les points de chaque source restant comptés par ailleurs.
+   */
+  compterTempete(o, t) {
+    const T = this.tempete;
+    if (t - T.debut >= 60e3) {
+      T.debut = t; T.lignes = 0; T.parPort.clear();
+      if (T.courante && t - T.courante.quand > 2 * 60e3) T.courante = null;
+    }
+    T.lignes++;
+    const port = o.dport || 0;
+    let p = T.parPort.get(port);
+    if (!p) { if (T.parPort.size > 500) return; p = new Map(); T.parPort.set(port, p); }
+    if (p.size < 20_000) p.set(o.src, (p.get(o.src) || 0) + 1);
+    const r = this.reglage();
+    const seuilSources = r.tempeteSources || 40, seuilLignes = r.tempeteLignes || 600;
+    if (p.size < seuilSources || T.lignes < seuilLignes) return;
+    if (t - (T.dernieres.get(port) || 0) < 10 * 60e3) return;
+    T.dernieres.set(port, t);
+    if (T.dernieres.size > 500) T.dernieres.clear();
+    const top = [...p.entries()].sort((a, b) => b[1] - a[1]).slice(0, 50).map(([ip, n]) => ({ ip, n }));
+    const paquets = [...p.values()].reduce((a, b) => a + b, 0);
+    T.courante = { quand: t, port, sources: p.size, paquets, parMinute: T.lignes, top };
+    try { this.surTempete(T.courante); } catch { /* le bouclier dit lui-même ses erreurs */ }
   }
 
   /** Balayages et force brute, comptés dans une fenêtre glissante de dix minutes. */

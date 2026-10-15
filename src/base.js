@@ -87,6 +87,12 @@ export const DEFAUTS = {
     dureesMinutes: [60, 1440, 10080, 43200], autoParHeure: 100, maxUnifi: 1000,
     listes: {}, listesPropres: [], listesHeures: 6, listeBlanche: [], emetteurs: [], sondes: [],
     unifiHote: '', unifiPort: 443, unifiFp: '', cleUnifi: null, jetonListe: null,
+    // Cloudflare, en amont : jeton d'API, compte, zones protégées, liste créée par VIGIE,
+    // et le mode « Under Attack » automatique en tempête.
+    cloudflareJeton: null, cloudflareCompte: '', cloudflareZones: [], cloudflareListe: '', cloudflareModeAttaque: false,
+    // Tempête : sources distinctes sur un même port et lignes entrantes en une minute ;
+    // blocages immédiats des plus bruyantes ; durée du mode Under Attack.
+    tempeteSources: 40, tempeteLignes: 600, tempeteBlocages: 20, tempeteMinutes: 15,
   },
   // La sentinelle : l'analyse des journaux d'hôtes reçus en syslog (src/sentinelle).
   // seuil : niveau (0-15) à partir duquel une alerte est retenue ; seuilEvenement :
@@ -94,7 +100,7 @@ export const DEFAUTS = {
   // correler : les alertes nourrissent le bouclier (score des adresses).
   sentinelle: { actif: true, seuil: 7, seuilEvenement: 10, correler: true, retentionJours: 30 },
 };
-const SCELLES = { ia: ['cle'], docker: ['jeton'], billetterie: ['cle'], telegram: ['jeton'], bouclier: ['cleUnifi', 'jetonListe'] };
+const SCELLES = { ia: ['cle'], docker: ['jeton'], billetterie: ['cle'], telegram: ['jeton'], bouclier: ['cleUnifi', 'jetonListe', 'cloudflareJeton'] };
 
 const json = (s, defaut) => { try { return s ? JSON.parse(s) : defaut; } catch { return defaut; } };
 

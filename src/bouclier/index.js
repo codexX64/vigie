@@ -29,7 +29,9 @@ export class Bouclier {
     this.riposte = new Riposte({ db, magasin, journal, signaler, maintenant, log, passerelleAuto });
     this.releve = { derniere: null, lues: 0, erreur: null, depuis: null, vus: new Set() };
     this.derniereIpsSyslog = 0;
-    this.correlateur = new Correlateur({ menaces: this.menaces, reglage, maintenant, surVerdict: v => this.surVerdict(v).catch(e => log.warn?.(`[bouclier] ${e.message}`)) });
+    this.correlateur = new Correlateur({ menaces: this.menaces, reglage, maintenant,
+      surVerdict: v => this.surVerdict(v).catch(e => log.warn?.(`[bouclier] ${e.message}`)),
+      surTempete: tp => this.riposte.tempete(tp).catch(e => log.warn?.(`[bouclier] tempête : ${e.message}`)) });
     this.recepteur = new Recepteur({
       port: cfg.syslogPort, emetteurs: () => reglage().emetteurs, log, maintenant,
       surObservation: o => { if (o.type === 'ips') this.derniereIpsSyslog = this.maintenant(); this.correlateur.observer(o); this.sentinelle?.observation(o); },
@@ -137,6 +139,8 @@ export class Bouclier {
       blocages: this.riposte.blocages({ limite: 400 }),
       actifs: this.riposte.actifs().length,
       unifi: { relie: !!this.riposte.unifi(), directe: !!(r.unifiHote && r.cleUnifi), hote: r.unifiHote || '', fp: r.unifiFp || '', ...this.riposte.etatUnifi },
+      cloudflare: { relie: !!r.cloudflareJeton, compte: r.cloudflareCompte || '', zones: r.cloudflareZones || [], modeAttaque: !!r.cloudflareModeAttaque, ...this.riposte.etatCloudflare },
+      tempete: this.correlateur.tempete.courante,
       passerelle: { ...this.passerelle, releve: { derniere: this.releve.derniere, lues: this.releve.lues, erreur: this.releve.erreur, active: !!this.passerelle.ips && this.maintenant() - this.derniereIpsSyslog >= 15 * 60e3 } },
     };
   }
@@ -146,7 +150,7 @@ export class Bouclier {
     const listes = () => this.menaces.actualiser().catch(e => this.log.warn?.(`[menaces] ${e.message}`));
     this.tListes = setTimeout(listes, 15_000); this.tListes.unref?.();
     this.iListes = setInterval(listes, 30 * 60e3); this.iListes.unref?.();
-    this.iRiposte = setInterval(() => { this.riposte.expirer(); this.riposte.synchroniser().catch(() => null); this.releverIps().catch(() => null); }, 60e3);
+    this.iRiposte = setInterval(() => { this.riposte.expirer(); this.riposte.synchroniser().catch(() => null); this.riposte.synchroniserCloudflare().catch(() => null); this.riposte.expirerAttaque().catch(() => null); this.releverIps().catch(() => null); }, 60e3);
     this.iRiposte.unref?.();
     const passerelle = () => this.lirePasserelle().catch(e => this.log.warn?.(`[passerelle] ${e.message}`));
     this.tPasserelle = setTimeout(passerelle, 5_000); this.tPasserelle.unref?.();

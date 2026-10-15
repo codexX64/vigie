@@ -16,6 +16,7 @@
 import crypto from 'node:crypto';
 import { estPublique, normaliser, EnsembleIp } from './ip.js';
 import { Unifi, ErreurUnifi } from './unifi.js';
+import { Cloudflare, ErreurCloudflare } from './cloudflare.js';
 
 export const MODES = ['observer', 'simulation', 'actif'];
 const DUREES_MIN = [60, 1440, 10080, 43200];
@@ -42,10 +43,12 @@ export function preparerBase(db) {
 }
 
 export class Riposte {
-  constructor({ db, magasin, journal = null, signaler = async () => null, maintenant = () => Date.now(), log = console, unifiFabrique = o => new Unifi(o), passerelleAuto = () => null }) {
-    Object.assign(this, { db, magasin, journal, signaler, maintenant, log, unifiFabrique, passerelleAuto });
+  constructor({ db, magasin, journal = null, signaler = async () => null, maintenant = () => Date.now(), log = console, unifiFabrique = o => new Unifi(o), passerelleAuto = () => null, cloudflareFabrique = o => new Cloudflare(o) }) {
+    Object.assign(this, { db, magasin, journal, signaler, maintenant, log, unifiFabrique, passerelleAuto, cloudflareFabrique });
     preparerBase(db);
     this.etatUnifi = this.magasin.memoire('unifi_etat', { ok: null, erreur: null, synchro: null, listes: {}, regles: null });
+    // Cloudflare : la liste du compte, la règle par zone, le mode « Under Attack » en cours.
+    this.etatCloudflare = this.magasin.memoire('cloudflare_etat', { ok: null, erreur: null, synchro: null, envoyees: 0, zones: [], attaque: null });
     this.aSynchroniser = true;
   }
 
@@ -124,7 +127,7 @@ export class Riposte {
       titre: `${etat === 'simule' ? 'Aurait bloqué' : 'Bloquée'} : ${ip}${duree ? ` pour ${libelle}` : ''}${recidive ? ` (récidive n° ${recidive})` : ''}`,
       texte: raisons.slice(0, 4).join(' ; ') || motif, sujet: ip, cle: `bouclier:${ip}:${id}`,
     });
-    if (etat === 'actif') { this.aSynchroniser = true; this.synchroniser().catch(() => null); }
+    if (etat === 'actif') { this.aSynchroniser = true; this.synchroniser().catch(() => null); this.synchroniserCloudflare().catch(() => null); }
     return b;
   }
 
@@ -136,6 +139,7 @@ export class Riposte {
     this.journal?.ecrire({ acteur: qui, action: 'bouclier.leve', objet: b.ip, details: { blocage: id } });
     this.aSynchroniser = true;
     await this.synchroniser().catch(() => null);
+    this.synchroniserCloudflare().catch(() => null);
     return this.ligne(this.db.prepare('SELECT * FROM blocages WHERE id = ?').get(id));
   }
 
@@ -183,6 +187,104 @@ export class Riposte {
       return this.etatUnifi;
     })().finally(() => { this.synchroEnCours = null; });
     return this.synchroEnCours;
+  }
+
+  // ---- Cloudflare, en amont ----
+  cloudflare() {
+    const r = this.reglage();
+    const jeton = this.magasin.secret('bouclier', 'cloudflareJeton');
+    return jeton ? this.cloudflareFabrique({ jeton, compte: r.cloudflareCompte || '', log: this.log }) : null;
+  }
+
+  /** La liste Cloudflare reçoit les adresses bloquées ; chaque zone choisie a sa règle de refus. */
+  async synchroniserCloudflare({ forcer = false } = {}) {
+    const cf = this.cloudflare();
+    if (!cf) return this.etatCloudflare;
+    // Une synchronisation en vol : on la laisse finir ; forcée, on repasse derrière elle.
+    if (this.cfEnCours) { const x = await this.cfEnCours; if (!forcer) return x; }
+    this.cfEnCours = (async () => {
+      const r = this.reglage();
+      const ips = this.actifs().map(b => b.ip).slice(0, 10_000);
+      const cle = ips.join(',');
+      if (!forcer && this.etatCloudflare.ok && this.etatCloudflare.cle === cle) return this.etatCloudflare;
+      try {
+        if (!cf.compte) { const s = await cf.sonder(); this.magasin.poserReglage('bouclier', { cloudflareCompte: s.compte }); }
+        const listeId = r.cloudflareListe || await cf.assurerListe();
+        if (listeId !== r.cloudflareListe) this.magasin.poserReglage('bouclier', { cloudflareListe: listeId });
+        const { envoyees } = await cf.synchroniser(listeId, ips);
+        const zones = [];
+        for (const z of r.cloudflareZones || []) {
+          try { const x = await cf.assurerRegle(z.id); zones.push({ ...z, regle: x.posee, erreur: null }); }
+          catch (e) { zones.push({ ...z, regle: false, erreur: e.message }); }
+        }
+        this.etatCloudflare = { ...this.etatCloudflare, ok: true, erreur: null, synchro: this.maintenant(), envoyees, zones, cle };
+      } catch (e) {
+        const avant = this.etatCloudflare.ok;
+        this.etatCloudflare = { ...this.etatCloudflare, ok: false, erreur: e instanceof ErreurCloudflare ? e.message : String(e.message || e), essai: this.maintenant() };
+        if (avant !== false) await this.signaler({ gravite: 'eleve', type: 'bouclier.cloudflare', titre: 'Cloudflare ne reçoit plus les blocages', texte: this.etatCloudflare.erreur, cle: 'bouclier.cloudflare' });
+      }
+      this.magasin.poserMemoire('cloudflare_etat', this.etatCloudflare);
+      return this.etatCloudflare;
+    })().finally(() => { this.cfEnCours = null; });
+    return this.cfEnCours;
+  }
+
+  /** Mode « Under Attack » sur les zones choisies, pour un temps ; l'ancien niveau est rendu ensuite. */
+  async modeAttaque(actif, { minutes = 15, auteur = 'vigie', motif = '' } = {}) {
+    const cf = this.cloudflare();
+    if (!cf) throw Object.assign(new Error('Cloudflare n’est pas relié.'), { status: 409 });
+    const r = this.reglage();
+    const zones = r.cloudflareZones || [];
+    if (!zones.length) throw Object.assign(new Error('Aucune zone Cloudflare choisie.'), { status: 409 });
+    const t = this.maintenant();
+    if (actif) {
+      const avant = this.etatCloudflare.attaque?.avant || {};
+      for (const z of zones) { if (!(z.id in avant)) avant[z.id] = await cf.niveau(z.id); await cf.poserNiveau(z.id, 'under_attack'); }
+      this.etatCloudflare = { ...this.etatCloudflare, attaque: { depuis: this.etatCloudflare.attaque?.depuis || t, jusqua: t + minutes * 60e3, avant, motif, auteur } };
+      this.journal?.ecrire({ acteur: auteur === 'vigie' ? null : auteur, action: 'bouclier.cloudflare.attaque', objet: zones.map(z => z.nom).join(','), details: { minutes, motif } });
+    } else {
+      const a = this.etatCloudflare.attaque;
+      for (const z of zones) await cf.poserNiveau(z.id, a?.avant?.[z.id] && a.avant[z.id] !== 'under_attack' ? a.avant[z.id] : 'medium');
+      this.etatCloudflare = { ...this.etatCloudflare, attaque: null };
+      this.journal?.ecrire({ acteur: auteur === 'vigie' ? null : auteur, action: 'bouclier.cloudflare.calme', objet: zones.map(z => z.nom).join(',') });
+    }
+    this.magasin.poserMemoire('cloudflare_etat', this.etatCloudflare);
+    return this.etatCloudflare.attaque;
+  }
+
+  /** Chaque minute : le mode d'attaque échu est levé. */
+  async expirerAttaque() {
+    const a = this.etatCloudflare.attaque;
+    if (a?.jusqua && this.maintenant() >= a.jusqua) await this.modeAttaque(false, { motif: 'fin du délai' }).catch(e => this.log.warn?.(`[cloudflare] ${e.message}`));
+  }
+
+  /**
+   * La tempête : beaucoup de sources sur un même port. Les plus bruyantes
+   * sont bloquées tout de suite (hors plafond horaire : c'est précisément le
+   * moment), l'événement est critique, et si c'est réglé, Cloudflare passe
+   * en mode « Under Attack » pour un temps.
+   */
+  async tempete(tp) {
+    const r = this.reglage();
+    const bloquees = [];
+    if (r.mode === 'actif') {
+      for (const { ip } of tp.top.slice(0, r.tempeteBlocages || 20)) {
+        if (this.refus(ip) || this.actif(ip)) continue;
+        try { bloquees.push((await this.bloquer({ ip, motif: `tempête sur le port ${tp.port}`, raisons: [`tempête : ${tp.sources} sources sur le port ${tp.port}, ${tp.parMinute} lignes en une minute`], score: 1000, auteur: 'vigie', automatique: true })).ip); } catch { /* refusée */ }
+      }
+    }
+    let attaque = null;
+    if (r.cloudflareModeAttaque && this.cloudflare() && (r.cloudflareZones || []).length) {
+      try { attaque = await this.modeAttaque(true, { minutes: r.tempeteMinutes || 15, motif: `tempête sur le port ${tp.port}` }); }
+      catch (e) { this.log.warn?.(`[cloudflare] mode attaque : ${e.message}`); }
+    }
+    await this.signaler({
+      gravite: 'critique', type: 'bouclier.tempete', forcer: true,
+      titre: `Tempête sur le port ${tp.port} : ${tp.sources} adresses, ${tp.parMinute} paquets en une minute`,
+      texte: `${bloquees.length ? `${bloquees.length} adresses les plus bruyantes bloquées à la frontière` : 'Mode ' + r.mode + ' : rien bloqué'}${attaque ? ' · Cloudflare en mode Under Attack' : ''}. Au-delà de la frontière, un déni de service volumétrique se traite en amont (Cloudflare, fournisseur d’accès).`,
+      sujet: `port ${tp.port}`, cle: `bouclier.tempete:${tp.port}`,
+    });
+    return { bloquees, attaque };
   }
 
   /** La liste servie aux pare-feu qui lisent une URL (pfSense, OPNsense, MikroTik…). */
