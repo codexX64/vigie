@@ -39,8 +39,6 @@ export function preparerBase(db) {
     CREATE INDEX IF NOT EXISTS blocages_ip ON blocages(ip);
     CREATE INDEX IF NOT EXISTS blocages_etat ON blocages(etat, fin);
   `);
-  // 1.2 : les blocages d'un exercice (outils d'essai du bouclier), jamais envoyés à la passerelle.
-  if (!db.prepare("SELECT 1 FROM pragma_table_info('blocages') WHERE name = 'exercice'").get()) db.exec('ALTER TABLE blocages ADD COLUMN exercice INTEGER NOT NULL DEFAULT 0');
 }
 
 export class Riposte {
@@ -70,46 +68,38 @@ export class Riposte {
     return null;
   }
 
-  ligne = l => l && { ...l, raisons: JSON.parse(l.raisons || '[]'), automatique: !!l.automatique, exercice: !!l.exercice };
+  ligne = l => l && { ...l, raisons: JSON.parse(l.raisons || '[]'), automatique: !!l.automatique };
   actif(ip) { return this.ligne(this.db.prepare("SELECT * FROM blocages WHERE ip = ? AND etat IN ('actif', 'simule') AND (fin IS NULL OR fin > ?) ORDER BY debut DESC LIMIT 1").get(ip, this.maintenant())); }
   blocages({ etat = null, limite = 200 } = {}) {
     const l = etat ? this.db.prepare('SELECT * FROM blocages WHERE etat = ? ORDER BY debut DESC LIMIT ?').all(etat, limite) : this.db.prepare('SELECT * FROM blocages ORDER BY debut DESC LIMIT ?').all(limite);
     return l.map(this.ligne);
   }
-  /** Les vrais blocages en cours : ceux qui partent vers la passerelle et la liste exportée. Un exercice n'y est jamais. */
-  actifs() { return this.db.prepare("SELECT * FROM blocages WHERE etat = 'actif' AND exercice = 0 AND (fin IS NULL OR fin > ?) ORDER BY score DESC, debut DESC").all(this.maintenant()).map(this.ligne); }
-  actifsExercice() { return this.db.prepare("SELECT COUNT(*) n FROM blocages WHERE etat IN ('actif', 'simule') AND exercice = 1 AND (fin IS NULL OR fin > ?)").get(this.maintenant()).n; }
-  /** Fin d'un exercice : ses blocages disparaissent, les vrais restent. */
-  effacerExercice() { return Number(this.db.prepare('DELETE FROM blocages WHERE exercice = 1').run().changes); }
-  /** Un signal d'exercice reste dans VIGIE : ni Telegram, ni billetterie. */
-  dire(e, exercice) { return this.signaler(exercice ? { ...e, type: `exercice.${e.type}`, titre: `Exercice · ${e.titre}`, cle: `exercice:${e.cle || e.titre}`, diffuser: false, memoriser: false } : e); }
+  actifs() { return this.db.prepare("SELECT * FROM blocages WHERE etat = 'actif' AND (fin IS NULL OR fin > ?) ORDER BY score DESC, debut DESC").all(this.maintenant()).map(this.ligne); }
 
   /** Un verdict de la corrélation. */
   async verdict(v) {
     const r = this.reglage();
-    const x = !!v.exercice;
     if (v.interne) {
-      await this.dire({ gravite: 'critique', type: 'bouclier.interne', titre: `Machine du réseau suspecte : ${v.ip} (score ${v.score})`, texte: v.raisons.join(' ; '), sujet: v.ip, cle: `bouclier.interne:${v.ip}`, ip: v.ip }, x);
+      await this.signaler({ gravite: 'critique', type: 'bouclier.interne', titre: `Machine du réseau suspecte : ${v.ip} (score ${v.score})`, texte: v.raisons.join(' ; '), sujet: v.ip, cle: `bouclier.interne:${v.ip}`, ip: v.ip });
       return null;
     }
     const refus = this.refus(v.ip);
     if (refus) return null;
     if (r.mode === 'observer') {
-      await this.dire({ gravite: 'faible', type: 'bouclier.menace', titre: `Menace extérieure : ${v.ip} (score ${v.score})`, texte: `${v.raisons.join(' ; ')}. Mode observation : rien n’est bloqué.`, sujet: v.ip, cle: `bouclier.menace:${v.ip}` }, x);
+      await this.signaler({ gravite: 'faible', type: 'bouclier.menace', titre: `Menace extérieure : ${v.ip} (score ${v.score})`, texte: `${v.raisons.join(' ; ')}. Mode observation : rien n’est bloqué.`, sujet: v.ip, cle: `bouclier.menace:${v.ip}` });
       return null;
     }
-    if (this.automatiquesRecents(x) >= r.autoParHeure) {
-      await this.dire({ gravite: 'eleve', type: 'bouclier.plafond', titre: `Plafond de ${r.autoParHeure} blocages automatiques par heure atteint`, texte: `${v.ip} n’est pas bloquée : à décider dans VIGIE.`, cle: 'bouclier.plafond' }, x);
+    if (this.automatiquesRecents() >= r.autoParHeure) {
+      await this.signaler({ gravite: 'eleve', type: 'bouclier.plafond', titre: `Plafond de ${r.autoParHeure} blocages automatiques par heure atteint`, texte: `${v.ip} n’est pas bloquée : à décider dans VIGIE.`, cle: 'bouclier.plafond' });
       return null;
     }
-    return this.bloquer({ ip: v.ip, motif: v.raisons[0] || 'score de menace', raisons: v.raisons, score: v.score, auteur: 'vigie', automatique: true, exercice: x });
+    return this.bloquer({ ip: v.ip, motif: v.raisons[0] || 'score de menace', raisons: v.raisons, score: v.score, auteur: 'vigie', automatique: true });
   }
 
-  // Le plafond se compte à part pour un exercice : il n'empêche jamais un vrai blocage.
-  automatiquesRecents(exercice = false) { return this.db.prepare('SELECT COUNT(*) n FROM blocages WHERE automatique = 1 AND exercice = ? AND debut > ?').get(exercice ? 1 : 0, this.maintenant() - 3600e3).n; }
+  automatiquesRecents() { return this.db.prepare('SELECT COUNT(*) n FROM blocages WHERE automatique = 1 AND debut > ?').get(this.maintenant() - 3600e3).n; }
 
   /** Bloquer (ou simuler) : durée selon les récidives des trente derniers jours. */
-  async bloquer({ ip: brute, motif = '', raisons = [], score = 0, auteur, automatique = false, minutes = null, exercice = false }) {
+  async bloquer({ ip: brute, motif = '', raisons = [], score = 0, auteur, automatique = false, minutes = null }) {
     const ip = normaliser(brute);
     const refus = this.refus(ip);
     if (refus) throw Object.assign(new Error(`${brute} : ${refus}.`), { status: 400 });
@@ -117,24 +107,24 @@ export class Riposte {
     if (deja) return deja;
     const r = this.reglage();
     const t = this.maintenant();
-    const recidive = this.db.prepare("SELECT COUNT(*) n FROM blocages WHERE ip = ? AND exercice = ? AND etat IN ('actif', 'expire', 'leve') AND debut > ?").get(ip, exercice ? 1 : 0, t - 30 * 86400e3).n;
+    const recidive = this.db.prepare("SELECT COUNT(*) n FROM blocages WHERE ip = ? AND etat IN ('actif', 'expire', 'leve') AND debut > ?").get(ip, t - 30 * 86400e3).n;
     const duree = minutes ?? (r.dureesMinutes || DUREES_MIN)[Math.min(recidive, (r.dureesMinutes || DUREES_MIN).length - 1)];
     const etat = r.mode === 'simulation' && automatique ? 'simule' : 'actif';
     const id = ref();
-    this.db.prepare('INSERT INTO blocages(id, ip, debut, fin, motif, raisons, score, auteur, automatique, etat, recidive, exercice) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
-      .run(id, ip, t, duree ? t + duree * 60e3 : null, String(motif).slice(0, 300), JSON.stringify(raisons.slice(0, 8).map(x => String(x).slice(0, 300))), Math.round(score), auteur, automatique ? 1 : 0, etat, recidive, exercice ? 1 : 0);
-    if (!exercice) this.journal?.ecrire({ acteur: automatique ? null : auteur, action: etat === 'simule' ? 'bouclier.simule' : 'bouclier.bloque', objet: ip, details: { duree, recidive, automatique, score: Math.round(score) } });
+    this.db.prepare('INSERT INTO blocages(id, ip, debut, fin, motif, raisons, score, auteur, automatique, etat, recidive) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, ip, t, duree ? t + duree * 60e3 : null, String(motif).slice(0, 300), JSON.stringify(raisons.slice(0, 8).map(x => String(x).slice(0, 300))), Math.round(score), auteur, automatique ? 1 : 0, etat, recidive);
+    this.journal?.ecrire({ acteur: automatique ? null : auteur, action: etat === 'simule' ? 'bouclier.simule' : 'bouclier.bloque', objet: ip, details: { duree, recidive, automatique, score: Math.round(score) } });
     const b = this.ligne(this.db.prepare('SELECT * FROM blocages WHERE id = ?').get(id));
     const libelle = duree >= 1440 ? `${Math.round(duree / 1440)} jour${duree >= 2880 ? 's' : ''}` : `${Math.round(duree / 60) || 1} h`;
     // Un blocage est la routine du bouclier, pas une alerte : « faible » (automatique)
     // ou « info » (manuel), pour qu'un balayage d'Internet ne fasse pas sonner
     // Telegram cent fois par heure. Ce qui demande quelqu'un reste « élevé » ou « critique ».
-    await this.dire({
+    await this.signaler({
       gravite: automatique ? 'faible' : 'info', type: etat === 'simule' ? 'bouclier.simule' : 'bouclier.bloque',
       titre: `${etat === 'simule' ? 'Aurait bloqué' : 'Bloquée'} : ${ip}${duree ? ` pour ${libelle}` : ''}${recidive ? ` (récidive n° ${recidive})` : ''}`,
       texte: raisons.slice(0, 4).join(' ; ') || motif, sujet: ip, cle: `bouclier:${ip}:${id}`,
-    }, exercice);
-    if (etat === 'actif' && !exercice) { this.aSynchroniser = true; this.synchroniser().catch(() => null); }
+    });
+    if (etat === 'actif') { this.aSynchroniser = true; this.synchroniser().catch(() => null); }
     return b;
   }
 

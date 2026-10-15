@@ -472,15 +472,6 @@ test('manifeste : une seule version partout, port des journaux publié en UDP et
   for (const p of ['udp', 'tcp']) assert.ok(c.includes(`"0.0.0.0:{{config.SYSLOG_PORT}}:5514/${p}"`), p);
   assert.ok(c.includes('VIGIE_SYSLOG_PORT_HOTE: "{{config.SYSLOG_PORT}}"'));
   assert.equal(m.config.find(c => c.key === 'SYSLOG_PORT').default, 5514);
-  assert.equal(m.config.find(c => c.key === 'EXERCICE').default, '0', 'pas d’exercice sur un réseau réel sans le demander');
-  assert.ok(c.includes('VIGIE_EXERCICE: "{{config.EXERCICE}}"'));
   for (const id of ['threat.blocked', 'host.compromised']) assert.ok(m.triggers.some(t => t.id === id), id);
   for (const id of ['shield.state', 'ip.block']) assert.ok(m.actions.some(a => a.id === id), id);
-});
-
-test('exercice du bouclier : absent tant que VIGIE_EXERCICE n’est pas posé', async () => {
-  const r = await admin.post('/api/bouclier/exercice', { action: 'demarrer' });
-  assert.equal(r.status, 404);
-  assert.match(r.json.error, /désactivé/);
-  assert.equal((await admin.get('/api/bouclier')).json.exercice.permis, false);
 });

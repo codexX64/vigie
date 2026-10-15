@@ -8,7 +8,6 @@ import { Riposte } from './riposte.js';
 import { Recepteur } from './recepteur.js';
 import { depuisEve, depuisPasserelle } from './journaux.js';
 import { PasserelleMapMyLAN } from './passerelle-mml.js';
-import { Exercice } from './exercice.js';
 
 export const empreinteJeton = j => crypto.createHash('sha256').update(`sonde:${j}`).digest('hex');
 
@@ -36,14 +35,12 @@ export class Bouclier {
       surObservation: o => { if (o.type === 'ips') this.derniereIpsSyslog = this.maintenant(); this.correlateur.observer(o); },
     });
     this.sondes = {};
-    this.exercice = new Exercice({ bouclier: this, maintenant });
   }
 
   async surVerdict(v) {
     const b = await this.riposte.verdict(v);
     // Une machine du réseau : la réaction rapide de la veille décide, sous ses propres règles.
-    // Jamais pour un exercice : les machines y sont inventées, et rien ne doit être isolé.
-    if (v.interne && !v.exercice && this.sources.public().mapmylan?.relie) {
+    if (v.interne && this.sources.public().mapmylan?.relie) {
       const a = await this.sources.appareilParIp(v.ip).catch(() => null);
       if (a) await this.moteur.reagir(a, { titre: `comportement de machine compromise (${v.raisons[0] || 'score ' + v.score})` });
     }
@@ -132,8 +129,6 @@ export class Bouclier {
       compteurs: this.correlateur.compteurs,
       blocages: this.riposte.blocages({ limite: 150 }),
       actifs: this.riposte.actifs().length,
-      exercice: { permis: !!this.cfg.exercice, ...this.exercice.etat() },
-      compteursExercice: this.correlateur.compteursExercice,
       unifi: { relie: !!this.riposte.unifi(), directe: !!(r.unifiHote && r.cleUnifi), hote: r.unifiHote || '', fp: r.unifiFp || '', ...this.riposte.etatUnifi },
       passerelle: { ...this.passerelle, releve: { derniere: this.releve.derniere, lues: this.releve.lues, erreur: this.releve.erreur, active: !!this.passerelle.ips && this.maintenant() - this.derniereIpsSyslog >= 15 * 60e3 } },
     };
@@ -151,5 +146,5 @@ export class Bouclier {
     this.iPasserelle = setInterval(passerelle, 5 * 60e3); this.iPasserelle.unref?.();
     return this;
   }
-  arreter() { this.exercice.arreter(); clearTimeout(this.tListes); clearInterval(this.iListes); clearInterval(this.iRiposte); clearTimeout(this.tPasserelle); clearInterval(this.iPasserelle); this.recepteur.arreter(); }
+  arreter() { clearTimeout(this.tListes); clearInterval(this.iListes); clearInterval(this.iRiposte); clearTimeout(this.tPasserelle); clearInterval(this.iPasserelle); this.recepteur.arreter(); }
 }

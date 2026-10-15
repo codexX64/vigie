@@ -100,8 +100,7 @@ export class Moteur {
 
   // ---------- événements ----------
   /** Un événement : noté, transmis (billetterie, Telegram, SYNAPSE), au plus une fois par six heures et par clé. */
-  // diffuser : Telegram et billetterie ; memoriser : SYNAPSE. Un exercice du bouclier ne fait ni l'un ni l'autre.
-  async signaler({ gravite, type, titre, texte = '', sujet = '', cle = '', forcer = false, diffuser = true, memoriser = true }) {
+  async signaler({ gravite, type, titre, texte = '', sujet = '', cle = '', forcer = false, diffuser = true }) {
     const memo = this.magasin.memoire('vus', {});
     const t = this.maintenant();
     const k = cle || `${type}:${sujet}:${titre}`;
@@ -111,7 +110,7 @@ export class Moteur {
     this.magasin.poserMemoire('vus', memo);
     const id = this.magasin.evenement({ gravite, type, titre, texte, sujet, cle: k });
     const e = { id, quand: t, gravite, type, titre, texte, sujet, cle: k };
-    if (memoriser) this.memoire.surEvenement(e);
+    this.memoire.surEvenement(e);
     if (diffuser) await this.diffusion.signaler(e).catch(() => null);
     return e;
   }

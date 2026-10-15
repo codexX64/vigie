@@ -54,7 +54,6 @@ const S = {
     dureesMinutes: { type: 'liste', max: 6, de: E(5, 525600) },
   },
   bloquer: { ip: T(50, { requis: true }), minutes: E(5, 525600), motif: T(200) },
-  exercice: { action: T(10, { requis: true, parmi: ['demarrer', 'arreter', 'effacer'] }), minutes: E(1, 120), intensite: T(10, { parmi: ['calme', 'normale', 'attaque'] }) },
   unifiSonde: { hote: T(253, { requis: true, motif: /^[A-Za-z0-9.:-]{1,253}$/ }), port: E(1, 65535) },
   unifi: { hote: T(253, { motif: /^[A-Za-z0-9.:-]{1,253}$/ }), port: E(1, 65535), fp: T(80), cle: T(200, { motif: /^[\x21-\x7e]{16,200}$/ }), retirer: B },
   sonde: { nom: T(40, { requis: true, motif: /^[a-z0-9][a-z0-9-]{0,39}$/ }) },
@@ -133,8 +132,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
   const vueAudit = a => a && { ...a, enCours: moteur.enCours?.id === a.id };
   const etat = () => {
     const dernier = magasin.dernierAudit();
-    // Les compteurs servent aussi les sondes du Hub : un exercice n'y entre pas.
-    const ev = magasin.evenements({ limite: 500, depuis: Date.now() - 7 * 86400e3 }).filter(e => !e.type.startsWith('exercice.'));
+    const ev = magasin.evenements({ limite: 500, depuis: Date.now() - 7 * 86400e3 });
     const iaR = magasin.reglage('ia');
     return {
       version: VERSION, audit: vueAudit(dernier), enCours: moteur.enCours ? vueAudit(magasin.audit(moteur.enCours.id)) : null,
@@ -184,11 +182,9 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     return { audit: { id: a.id, debut: a.debut, score: a.score }, constats: magasin.constats(a.id).filter(c => c.sujetId === ctx.q.appareil) };
   }, { requete: Q.constats });
   r.get('/api/evenements', ctx => {
-    const qui = acces(ctx, LECTURE);
+    acces(ctx, LECTURE);
     const { limite = 100, depuis = 0, type, min } = ctx.q;
-    // Un exercice du bouclier se regarde dans VIGIE : les jetons (Hub, déclencheurs, services) ne le voient jamais.
-    const exercice = qui.type === 'session';
-    return magasin.evenements({ limite: 2000, depuis }).filter(e => (exercice || !e.type.startsWith('exercice.')) && (!type || e.type === type) && (!min || RANG[e.gravite] >= RANG[min])).slice(0, limite);
+    return magasin.evenements({ limite: 2000, depuis }).filter(e => (!type || e.type === type) && (!min || RANG[e.gravite] >= RANG[min])).slice(0, limite);
   }, { requete: Q.evenements });
   r.get('/api/actions', ctx => { acces(ctx, { jetons: ['hub'] }); return magasin.actions(100); });
 
@@ -370,19 +366,6 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     const qui = acces(ctx, { role: 'admin', jetons: ['hub'] });
     await corps(ctx, S.vide);
     try { return await bouclier.riposte.lever(ctx.params.id, qui.nom); } catch (e) { throw new ErreurHttp(e.status || 400, e.message); }
-  });
-  // L'exercice : de fausses attaques pour regarder le bouclier travailler. Session
-  // d'administrateur seulement ; rien n'en sort (exercice.js).
-  r.post('/api/bouclier/exercice', async ctx => {
-    // Coupé par défaut : sur un réseau réel, la route n'existe pas.
-    if (!cfg.exercice) throw new ErreurHttp(404, 'Exercice désactivé sur cette VIGIE (VIGIE_EXERCICE).');
-    const s = admin(ctx);
-    const b = await corps(ctx, S.exercice);
-    const x = bouclier.exercice;
-    const out = b.action === 'demarrer' ? x.demarrer({ minutes: b.minutes ?? 10, intensite: b.intensite || 'normale' })
-      : b.action === 'arreter' ? x.arreter() : { efface: x.effacer(), ...x.etat() };
-    journal.ecrire({ acteur: s.compte, action: `bouclier.exercice.${b.action}`, objet: 'exercice', ip: ctx.ip, details: b.action === 'demarrer' ? { minutes: b.minutes ?? 10, intensite: b.intensite || 'normale' } : null });
-    return out;
   });
   r.post('/api/bouclier/listes/actualiser', async ctx => {
     admin(ctx);

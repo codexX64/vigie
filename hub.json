@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "vigie",
   "name": "VIGIE",
-  "version": "1.2.0",
+  "version": "1.1.1",
   "description": "Audit, veille et bouclier du réseau : règles Codex64, IPS de la passerelle UniFi croisé aux listes de menaces, attaquants bloqués à la frontière, IA au choix.",
   "icon": "shield",
   "repository": "https://github.com/CodexX64/vigie",
@@ -54,7 +54,7 @@
       "key": "IMAGE_TAG",
       "label": "Version de l'image",
       "type": "string",
-      "default": "1.2.0",
+      "default": "1.1.1",
       "help": "Étiquette de l'image vigie.",
       "advanced": true
     },
@@ -196,25 +196,6 @@
       "max": 65535,
       "required": true,
       "help": "Port UDP et TCP ouvert sur la machine pour les journaux de la passerelle UniFi (UniFi Network → Integrations → Activity Logging → SIEM Server, et CyberSecure → Traffic Logging). Seuls les émetteurs déclarés dans VIGIE → Bouclier sont lus ; sans liste, toute adresse privée."
-    },
-    {
-      "key": "EXERCICE",
-      "label": "Exercice du bouclier (machine de test)",
-      "type": "select",
-      "default": "0",
-      "required": true,
-      "advanced": true,
-      "options": [
-        {
-          "value": "0",
-          "label": "Non — réseau réel"
-        },
-        {
-          "value": "1",
-          "label": "Oui — machine de test : fausses attaques à la demande"
-        }
-      ],
-      "help": "Ajoute « Exercice » dans VIGIE → Bouclier : de fausses attaques pour regarder le bouclier travailler. Rien n'en sort (ni passerelle, ni isolement, ni alerte). À laisser sur « Non » sur le réseau réel."
     },
     {
       "key": "HUB_TOKEN",

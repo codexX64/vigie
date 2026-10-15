@@ -105,18 +105,6 @@ l'IPS et les blocages ; restent les deux règles du pare-feu (VIGIE → Bouclier
 → carte « Passerelle »), et, pour le pot de miel et les refus du pare-feu,
 les journaux de la passerelle (carte « Journaux de la passerelle »).
 
-**L'exercice (machine de test seulement).** Avec `VIGIE_EXERCICE=1` (« Exercice
-du bouclier » dans les réglages avancés du Hub, coupé par défaut), un bouton
-« Exercice » lance pour 5 minutes à 2 heures de fausses attaques : bruit de
-fond, balayages, force brute, alertes d'IPS des trois gravités, serveurs de
-commande et domaines « listés », pot de miel, noms générés. Elles passent par
-la même corrélation et la même riposte que les vraies, marquées « exercice »
-partout. Rien n'en sort : aucune adresse vers la passerelle ni la liste
-exportée, aucune machine isolée, ni Telegram, ni billetterie, ni SYNAPSE, ni
-événement visible des jetons du Hub ; plafond horaire compté à part. Une vraie
-attaque pendant un exercice est traitée pour de vrai. « Effacer » retire tout
-ce que l'exercice a laissé. Sur le réseau réel, la route n'existe pas (404).
-
 ## Règles
 
 **Surface réseau**

@@ -22,8 +22,6 @@ const duree = ms => {
 };
 const depuis = t => (!t ? 'jamais' : Date.now() - t < 60e3 ? 'à l’instant' : `il y a ${duree(Date.now() - t)}`);
 const lignes = v => v.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
-// Ce qui vient d'un exercice porte sa marque, partout.
-const marque = x => (x?.exercice ? h('span', { class: 'chip exercice', text: 'exercice' }) : null);
 const barre = (score, seuil) => {
   const b = h('div', { class: 'bar menace-barre' }, h('i'));
   b.firstChild.style.width = `${Math.min(100, Math.round(score / seuil * 100))}%`;
@@ -43,28 +41,6 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
   const alertes = h('div', {});
   const internes = h('div', {});
   let tousBlocages = false;
-
-  const bandeau = h('div', {});
-  const lancerExercice = sur(async () => {
-    const duree = h('select', { class: 'field', 'aria-label': 'Durée' }, [[5, '5 minutes'], [10, '10 minutes'], [30, '30 minutes'], [60, '1 heure'], [120, '2 heures']].map(([v, t]) => h('option', { value: v, text: t, selected: v === 10 })));
-    const force = h('select', { class: 'field mt9', 'aria-label': 'Intensité' }, [['calme', 'Calme — un scénario toutes les 3 s'], ['normale', 'Normale — un par seconde'], ['attaque', 'Sous attaque — quatre par seconde']].map(([v, t]) => h('option', { value: v, text: t, selected: v === 'normale' })));
-    const ok = await dialogue({
-      titre: 'Lancer un exercice',
-      texte: 'De fausses attaques — balayages, force brute, alertes d’IPS, serveur de commande, pot de miel, noms générés — entrent dans le bouclier comme les vraies, pour le regarder travailler. Rien n’en sort : aucune adresse vers la passerelle, aucune machine isolée, ni Telegram, ni billetterie, ni Hub. Tout se marque « exercice » et s’efface en un clic.',
-      contenu: [duree, force],
-      boutons: [{ texte: 'Annuler', classe: 'flat', valeur: false }, { texte: 'Lancer', classe: 'solid', valeur: true }],
-    });
-    if (!ok) return;
-    await api.post('/api/bouclier/exercice', { action: 'demarrer', minutes: Number(duree.value), intensite: force.value });
-    toast('Exercice lancé : regarde les menaces monter.');
-    await peindre();
-  });
-  const exercice = action => sur(async () => {
-    if (action === 'effacer' && !(await confirmer('Effacer l’exercice ?', 'Ses adresses, alertes, blocages et événements disparaissent. Le réel reste.', { oui: 'Effacer' }))) return;
-    const o = await api.post('/api/bouclier/exercice', { action });
-    toast(action === 'arreter' ? 'Exercice arrêté.' : `Exercice effacé : ${o.efface.adresses} adresses, ${o.efface.blocages} blocages, ${o.efface.evenements} événements.`);
-    await peindre();
-  });
 
   const bloquer = (ip = '') => sur(async () => {
     const champ = h('input', { class: 'field mono', value: ip, placeholder: '203.0.113.7 ou 2001:db8::7', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Adresse' });
@@ -92,14 +68,12 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
     const recues = e.syslog.lues + e.sondes.reduce((a, s) => a + s.lues, 0) + (releve.derniere ? 1 : 0);
     lede.textContent = `${MODES[e.mode]} · seuil ${e.seuil} · ${e.listes.filter(l => l.active && l.entrees).length} listes de menaces chargées`;
 
-    const xe = e.exercice || {}, ips = e.compteurs.ips || 0, ipsX = e.compteursExercice?.ips || 0;
     const fig = (titre, valeur, detail, ic, chaud = false) => h('div', { class: 'fig' }, h('div', { class: `tile ${chaud ? 'warn' : ''}` }, icone(ic, 15)), h('span', { text: titre }), h('strong', { text: String(valeur) }), h('div', { class: 'delta', text: detail }));
     figs.replaceChildren(
-      // Pendant un exercice, les chiffres le comptent aussi, et disent combien en vient.
-      fig('Bloquées', e.actifs + (xe.blocages || 0), xe.blocages ? `dont ${xe.blocages} d’exercice` : e.mode === 'actif' ? 'sur la passerelle et la liste' : `mode ${e.mode}`, 'bouclier', e.actifs > 0),
-      fig('Menaces suivies', e.menaces.length, e.menaces[0] ? `la plus haute : ${e.menaces[0].score}${e.menaces.some(m => m.exercice) ? ' · exercice compris' : ''}` : 'aucune adresse notée', 'oeil'),
-      fig('Alertes IPS', ips + ipsX, ipsX ? `dont ${ipsX.toLocaleString('fr-FR')} d’exercice` : `${(e.compteurs['pare-feu'] || 0).toLocaleString('fr-FR')} lignes de pare-feu`, 'eclair', ips > 0),
-      fig('Machines suspectes', e.internes.filter(x => x.score >= x.seuil / 2).length, e.internes.some(m => m.exercice) ? 'exercice compris' : 'du réseau local', 'alerte', e.internes.some(x => !x.exercice && x.score >= x.seuil)));
+      fig('Bloquées', e.actifs, e.mode === 'actif' ? 'sur la passerelle et la liste' : `mode ${e.mode}`, 'bouclier', e.actifs > 0),
+      fig('Menaces suivies', e.menaces.length, e.menaces[0] ? `la plus haute : ${e.menaces[0].score}` : 'aucune adresse notée', 'oeil'),
+      fig('Alertes IPS', e.compteurs.ips || 0, `${(e.compteurs['pare-feu'] || 0).toLocaleString('fr-FR')} lignes de pare-feu`, 'eclair', (e.compteurs.ips || 0) > 0),
+      fig('Machines suspectes', e.internes.filter(x => x.score >= x.seuil / 2).length, 'du réseau local', 'alerte', e.internes.some(x => x.score >= x.seuil)));
 
     const notes = [];
     if (!recues) notes.push(['warn', 'Rien reçu de la passerelle pour l’instant : ni journal, ni relève par MapMyLAN. Voir « Passerelle » et « Journaux de la passerelle » plus bas.']);
@@ -110,20 +84,11 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
     else if (e.unifi.ok === false) notes.push(['warn', `La passerelle ne reçoit plus les blocages : ${e.unifi.erreur}`]);
     else if (e.unifi.regles && !e.unifi.regles.erreur && (!e.unifi.regles.entrant || !e.unifi.regles.sortant)) notes.push(['warn', `Listes envoyées, mais ${!e.unifi.regles.entrant && !e.unifi.regles.sortant ? 'aucune règle du pare-feu ne les cite' : `la règle ${!e.unifi.regles.entrant ? 'd’entrée' : 'de sortie'} manque`} : elles ne bloquent rien tant que les règles ne sont pas posées (Passerelle UniFi, plus bas).`]);
     if (e.mode !== 'actif') notes.push(['', e.mode === 'observer' ? 'Mode observation : VIGIE signale, ne bloque rien.' : 'Mode simulation : VIGIE note ce qu’il aurait bloqué, rien ne part vers la passerelle.']);
-    const x = e.exercice || {};
-    bandeau.replaceChildren(...(x.actif || x.adresses || x.blocages ? [h('div', { class: `card mb12 exercice-bandeau${x.actif ? ' en-cours' : ''}` }, h('div', { class: 'notice' },
-      h('span', { class: 'itile g-info' }, icone('eclair', 15)),
-      h('div', { class: 'grow1' },
-        h('p', {}, h('strong', { text: x.actif ? 'Exercice en cours' : 'Données d’exercice affichées' }), ` — ${x.observations.toLocaleString('fr-FR')} observations inventées, ${x.adresses} adresses notées, ${x.blocages} bloquée${x.blocages > 1 ? 's' : ''} pour de faux${x.actif ? ` · fin dans ${duree(x.fin - maintenant)} · ${x.intensite}` : ''}.`),
-        h('small', { text: Object.entries(x.scenarios || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ') || 'rien encore' })),
-      admin ? h('div', { class: 'actions' },
-        x.actif ? h('button', { class: 'btn sm', type: 'button', onclick: exercice('arreter') }, 'Arrêter') : null,
-        h('button', { class: 'btn sm', type: 'button', onclick: exercice('effacer') }, 'Effacer')) : null))] : []));
     avis.replaceChildren(...notes.map(([c, t]) => h('div', { class: 'card mb12' }, h('div', { class: 'notice' }, h('span', { class: `itile ${c ? 'g-eleve' : 'g-info'}` }, icone(c ? 'alerte' : 'oeil', 15)), h('div', {}, h('p', { text: t }))))));
 
-    menaces.replaceChildren(...(e.menaces.length ? e.menaces.slice(0, 25).map(m => h('div', { class: 'flowrow', 'data-donnee': '' },
+    menaces.replaceChildren(...(e.menaces.length ? e.menaces.map(m => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile ${m.score >= m.seuil ? 'g-critique' : m.score >= m.seuil / 2 ? 'g-eleve' : 'g-faible'}` }, icone('oeil', 15)),
-      h('div', { class: 'grow1' }, h('strong', { class: 'ip' }, m.ip, marque(m)),
+      h('div', { class: 'grow1' }, h('strong', { class: 'ip', text: m.ip }),
         barre(m.score, m.seuil),
         h('small', { text: `${m.score} / ${m.seuil} · ${m.raisons.slice(0, 3).map(r => r.n > 1 ? `${r.texte} (×${r.n})` : r.texte).join(' · ')}` }),
         h('small', { text: `vue ${m.vu} fois · dernière ${depuis(m.dernier)}` })),
@@ -131,10 +96,10 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
         : admin ? h('button', { class: 'btn sm', type: 'button', onclick: () => bloquer(m.ip) }, 'Bloquer') : null)))
       : [h('p', { class: 'vide', text: 'Aucune adresse extérieure notée. Elles apparaissent ici dès qu’une alerte, un balayage ou une liste de menaces les signale.' })]));
 
-    const toutes = tousBlocages ? e.blocages : actifs, montres = toutes.slice(0, 25);
+    const montres = (tousBlocages ? e.blocages : actifs).slice(0, 80);
     blocages.replaceChildren(...(montres.length ? montres.map(b => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile ${b.etat === 'actif' ? 'g-critique' : ''}` }, icone(b.automatique ? 'eclair' : 'bouclier', 15)),
-      h('div', { class: 'grow1' }, h('strong', { class: 'ip' }, b.ip, marque(b)),
+      h('div', { class: 'grow1' }, h('strong', { class: 'ip', text: b.ip }),
         h('span', { class: `tag ${['actif', 'simule'].includes(b.etat) ? (b.etat === 'actif' ? 'held' : 'warn') : 'idle'}` }, h('i', { class: 'd' }),
           ['actif', 'simule'].includes(b.etat) ? `${ETAT[b.etat]} · ${b.fin ? `encore ${duree(b.fin - maintenant)}` : 'sans fin'}` : `${ETAT[b.etat] || b.etat}${b.leve_par ? ` par ${b.leve_par}` : ''}`),
         h('small', { text: [b.automatique ? 'VIGIE' : `par ${b.auteur}`, quand(b.debut), b.recidive ? `récidive n° ${b.recidive}` : ''].filter(Boolean).join(' · ') }),
@@ -146,9 +111,9 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
         }) }, 'Lever') : null)))
       : [h('p', { class: 'vide', text: tousBlocages ? 'Aucun blocage.' : 'Aucune adresse bloquée en ce moment.' })]));
 
-    alertes.replaceChildren(...(e.alertes.length ? e.alertes.slice(0, 25).map(a => h('div', { class: 'flowrow', 'data-donnee': '' },
+    alertes.replaceChildren(...(e.alertes.length ? e.alertes.slice(0, 40).map(a => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile ${a.gravite === 1 ? 'g-critique' : a.gravite === 2 ? 'g-eleve' : 'g-faible'}` }, icone('eclair', 15)),
-      h('div', { class: 'grow1' }, h('strong', {}, a.signature || 'alerte', marque(a)),
+      h('div', { class: 'grow1' }, h('strong', { text: a.signature || 'alerte' }),
         h('small', { class: 'mono', text: `${a.src || '?'} → ${a.dst || '?'}${a.dport ? `:${a.dport}` : ''}` }),
         h('small', { text: [a.categorie, a.capteur, quand(a.quand)].filter(Boolean).join(' · ') })),
       h('div', { class: 'fin' }, h('span', { class: `tag ${a.action === 'bloque' ? '' : 'warn'}` }, h('i', { class: 'd' }), a.action === 'bloque' ? 'coupée par l’IPS' : `gravité ${a.gravite}`))))
@@ -156,23 +121,22 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
 
     internes.replaceChildren(...(e.internes.length ? e.internes.map(m => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile ${m.score >= m.seuil ? 'g-critique' : 'g-eleve'}` }, icone('alerte', 15)),
-      h('div', { class: 'grow1' }, h('strong', { class: 'ip' }, m.ip, marque(m)), barre(m.score, m.seuil),
+      h('div', { class: 'grow1' }, h('strong', { class: 'ip', text: m.ip }), barre(m.score, m.seuil),
         h('small', { text: m.raisons.slice(0, 3).map(r => r.texte).join(' · ') })),
       h('div', { class: 'fin' }, h('span', { class: 'note', text: `${m.score} / ${m.seuil}` }))))
       : [h('p', { class: 'vide', text: 'Aucune machine du réseau ne se comporte comme une machine compromise.' })]));
   }
   async function peindre() { etat = await api.get('/api/bouclier'); peindre_(); }
   peindre_();
-  // Toutes les cinq secondes : assez vite pour regarder un exercice se dérouler.
-  suivre(peindre, 5000);
+  suivre(peindre, 15000);
 
   const page = h('div', { class: 'page' },
     h('div', { class: 'headrow' },
       h('div', {}, h('h1', { class: 'title', text: 'Bouclier' }), lede),
       h('div', { class: 'actions' },
-        admin && etat.exercice?.permis ? h('button', { class: 'btn', type: 'button', onclick: lancerExercice }, icone('eclair', 15), 'Exercice') : null,
+        admin ? h('button', { class: 'btn', type: 'button', onclick: sur(async () => { const o = await api.post('/api/bouclier/listes/actualiser', {}); toast(o.faits.length ? `${o.faits.length} liste${o.faits.length > 1 ? 's' : ''} actualisée${o.faits.length > 1 ? 's' : ''}.` : 'Aucune liste téléchargée : voir les erreurs plus bas.', !o.faits.length); await peindre(); }) }, icone('liste', 15), 'Actualiser les listes') : null,
         admin ? h('button', { class: 'btn solid', type: 'button', onclick: () => bloquer() }, icone('bouclier', 15), 'Bloquer une adresse') : null)),
-    bandeau, figs, avis,
+    figs, avis,
     h('div', { class: 'split' },
       h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Menaces extérieures' }), h('span', { class: 'note', text: 'score effacé de moitié chaque heure' })), menaces),
       h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Blocages' }), h('span', { class: 'note' }, h('span', { class: 'row' }, h('span', { text: 'Historique' }), interrupteur(false, 'Historique des blocages', v => { tousBlocages = v; peindre_(); })))), blocages)),
@@ -314,8 +278,7 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
     return h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Listes de menaces' }), h('span', { class: 'note', text: `toutes les ${reglages.listesHeures} h` })), h('div', { class: 'cardbody' },
       h('p', { class: 'hint mt0', text: 'Réputation partagée (abuse.ch, Spamhaus, Emerging Threats…). Une liste ne bloque rien seule : elle pèse dans le score d’une adresse que VIGIE voit vraiment passer — on bloque ce qui frappe, pas un million d’adresses par précaution.' }),
       toutes,
-      h('div', { class: 'actions mt12' }, h('button', { class: 'btn sm', type: 'button', onclick: sur(async () => { const o = await api.post('/api/bouclier/listes/actualiser', {}); toast(o.faits.length ? `${o.faits.length} liste${o.faits.length > 1 ? 's' : ''} actualisée${o.faits.length > 1 ? 's' : ''}.` : 'Aucune liste téléchargée : voir les erreurs plus bas.', !o.faits.length); await peindre(); }) }, 'Télécharger maintenant')),
-      h('div', { class: 'actions mt9' }, h('button', { class: 'btn solid', type: 'button', onclick: enregistrer(() => ({ listes: choix }), 'Listes enregistrées : téléchargement lancé.') }, 'Enregistrer')),
+      h('div', { class: 'actions mt12' }, h('button', { class: 'btn solid', type: 'button', onclick: enregistrer(() => ({ listes: choix }), 'Listes enregistrées : téléchargement lancé.') }, 'Enregistrer')),
       h('details', { class: 'mt12' }, h('summary', { text: 'Ajouter une liste (texte, une entrée par ligne, en HTTPS)' }),
         h('div', { class: 'deux mt9' }, nom, type), h('div', { class: 'mt9' }, url), h('label', { class: 'lbl mt9', text: 'Poids (100 = blocage dès qu’elle est vue)' }), poids,
         h('div', { class: 'actions mt9' },
