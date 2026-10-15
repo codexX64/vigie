@@ -52,7 +52,11 @@ const S = {
     listeBlanche: { type: 'liste', max: 500, de: T(50) }, emetteurs: { type: 'liste', max: 50, de: T(50) },
     listesPropres: { type: 'liste', max: 10, de: { type: 'objet', champs: { nom: T(60, { requis: true }), type: T(8, { requis: true, parmi: ['ip', 'domaine'] }), url: T(500, { requis: true, motif: /^https:\/\/\S{3,490}$/ }), poids: E(5, 100) } } },
     dureesMinutes: { type: 'liste', max: 6, de: E(5, 525600) },
+    tempeteSources: E(5, 100000), tempeteLignes: E(50, 1000000), tempeteBlocages: E(0, 500), tempeteMinutes: E(1, 1440), cloudflareModeAttaque: B,
   },
+  cloudflare: { jeton: T(200, { motif: /^[A-Za-z0-9_-]{20,200}$/ }), retirer: B, zones: { type: 'liste', max: 50, de: { type: 'objet', champs: { id: T(40, { requis: true, motif: /^[0-9a-f]{32}$/ }), nom: T(253, { requis: true }) } } } },
+  cloudflareSonde: { jeton: T(200, { motif: /^[A-Za-z0-9_-]{20,200}$/ }) },
+  attaque: { actif: B, minutes: E(1, 1440) },
   bloquer: { ip: T(50, { requis: true }), minutes: E(5, 525600), motif: T(200) },
   unifiSonde: { hote: T(253, { requis: true, motif: /^[A-Za-z0-9.:-]{1,253}$/ }), port: E(1, 65535) },
   unifi: { hote: T(253, { motif: /^[A-Za-z0-9.:-]{1,253}$/ }), port: E(1, 65535), fp: T(80), cle: T(200, { motif: /^[\x21-\x7e]{16,200}$/ }), retirer: B },
@@ -404,6 +408,39 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     admin(ctx);
     await corps(ctx, S.vide);
     return bouclier.riposte.synchroniser({ forcer: true });
+  });
+  // ---- Cloudflare, en amont ----
+  // Sonder un jeton (celui posé, ou un nouveau avant de l'enregistrer) : compte et zones lisibles.
+  r.post('/api/bouclier/cloudflare/sonde', async ctx => {
+    admin(ctx);
+    const b = await corps(ctx, S.cloudflareSonde);
+    const jeton = b.jeton || magasin.secret('bouclier', 'cloudflareJeton');
+    if (!jeton) throw new ErreurHttp(400, 'Aucun jeton Cloudflare.');
+    try { return await bouclier.riposte.cloudflareFabrique({ jeton }).sonder(); } catch (e) { throw new ErreurHttp(502, e.message); }
+  });
+  r.put('/api/bouclier/cloudflare', async ctx => {
+    const s = admin(ctx, true);
+    const b = await corps(ctx, S.cloudflare);
+    if (b.retirer) {
+      magasin.poserSecret('bouclier', 'cloudflareJeton', null);
+      magasin.poserReglage('bouclier', { cloudflareCompte: '', cloudflareZones: [], cloudflareListe: '', cloudflareModeAttaque: false });
+      bouclier.riposte.etatCloudflare = { ok: null, erreur: null, synchro: null, envoyees: 0, zones: [], attaque: null };
+      magasin.poserMemoire('cloudflare_etat', bouclier.riposte.etatCloudflare);
+    } else {
+      if (b.jeton) { magasin.poserSecret('bouclier', 'cloudflareJeton', b.jeton); magasin.poserReglage('bouclier', { cloudflareCompte: '', cloudflareListe: '' }); }
+      if (b.zones) magasin.poserReglage('bouclier', { cloudflareZones: b.zones.map(z => ({ id: z.id, nom: z.nom.toLowerCase().slice(0, 253) })) });
+    }
+    journal.ecrire({ acteur: s.compte, action: 'reglages.bouclier.cloudflare', objet: 'cloudflare', ip: ctx.ip, details: { jeton: !!b.jeton, zones: (b.zones || []).length, retirer: !!b.retirer } });
+    if (!b.retirer) await bouclier.riposte.synchroniserCloudflare({ forcer: true });
+    return bouclier.riposte.etatCloudflare;
+  });
+  r.post('/api/bouclier/cloudflare/synchroniser', async ctx => { admin(ctx); await corps(ctx, S.vide); return bouclier.riposte.synchroniserCloudflare({ forcer: true }); });
+  // Le mode « Under Attack » à la main : on le lève ou on le pose, pour un temps.
+  r.post('/api/bouclier/cloudflare/attaque', async ctx => {
+    const qui = admin(ctx, true);
+    const b = await corps(ctx, S.attaque);
+    try { return { attaque: await bouclier.riposte.modeAttaque(!!b.actif, { minutes: b.minutes || 15, auteur: qui.compteLigne.identifiant, motif: 'à la main' }) }; }
+    catch (e) { throw new ErreurHttp(e.status || 502, e.message); }
   });
   // Les sondes Suricata : un jeton par sonde, montré une fois, gardé par son empreinte.
   r.post('/api/bouclier/sondes', async ctx => {
