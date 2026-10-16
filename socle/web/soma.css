@@ -158,7 +158,7 @@ html[data-gamme="console"] .card>header{padding:18px 20px 14px}
 html[data-gamme="console"] .card>header h2{font-size:15px;font-weight:500}
 html[data-gamme="console"] .card>header .note{font-size:12px;color:var(--faint)}
 html[data-gamme="console"] .card .pad{padding:0 20px 18px}
-html[data-gamme="console"] .split{gap:12px}
+html[data-gamme="console"] .split,html[data-gamme="console"] .colonnes,html[data-gamme="console"] .colonne{gap:12px}
 html[data-gamme="console"] .page>*+*{margin-top:12px}
 html[data-gamme="console"] th{font-weight:400;font-size:13px;letter-spacing:0;text-transform:none;color:var(--faint);padding:10px 14px;background:var(--well);border-bottom:none}
 html[data-gamme="console"] td{padding:12px 14px;border-bottom:none;border-top:1px solid var(--hair);font-size:14px}
@@ -303,6 +303,11 @@ svg.i{display:block;flex:none;stroke:currentColor;fill:none;stroke-linecap:round
 .fig .chart{margin:8px -17px -12px;display:block;width:calc(100% + 34px);height:46px}
 
 .split{display:grid;grid-template-columns:minmax(0,1.42fr) minmax(0,1fr);gap:16px;align-items:start}
+/* Deux colonnes de cartes qui s'empilent chacune à sa hauteur : jamais de vide
+ * sous une carte courte parce que sa voisine est longue (une ligne de .split
+ * prend la hauteur de la plus haute). */
+.colonnes{display:grid;grid-template-columns:minmax(0,1.42fr) minmax(0,1fr);gap:16px;align-items:start}
+.colonne{display:grid;gap:16px;align-content:start;min-width:0}
 .grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:16px}
 .card{background:var(--surface);border-radius:var(--r-carte);box-shadow:var(--lift);overflow:hidden;min-width:0}
 .card>header{display:flex;align-items:center;gap:10px;padding:15px 18px 13px;flex-wrap:wrap;min-width:0}
@@ -529,7 +534,7 @@ textarea.field{min-height:90px;resize:vertical;line-height:1.5}
 
 /* Zone de travail : ce qui se replie quand la place manque. */
 @container stage (max-width:900px){
-  .split{grid-template-columns:minmax(0,1fr)}
+  .split,.colonnes{grid-template-columns:minmax(0,1fr)}
   .cache-l{display:none!important}
 }
 @container stage (max-width:720px){
