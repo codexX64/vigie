@@ -222,26 +222,28 @@ async function pageTableau() {
     e.evenements.critiques ? h('div', { class: 'card mb18' }, h('div', { class: 'notice' }, h('span', { class: 'itile g-critique' }, icone('eclair', 15)),
       h('div', {}, h('p', { text: `${pluriel(e.evenements.critiques, 'événement critique', 'événements critiques')} non acquitté${e.evenements.critiques > 1 ? 's' : ''} cette semaine.` })),
       h('button', { class: 'btn sm', type: 'button', onclick: () => aller('evenements') }, 'Voir'))) : null,
-    h('div', { class: 'split' },
+    // Deux colonnes qui s'empilent chacune à sa hauteur : pas de vide sous le score.
+    h('div', { class: 'colonnes' },
+      h('div', { class: 'colonne' },
       h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Score' }), h('span', { class: 'note', text: a.score === null ? 'non évalué' : 'recalculé à chaque audit' })),
         h('div', { class: 'score-carte' }, anneau(a.score, delta), barresDomaines(a))),
+        h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Évolution du score' })), courbe(histo)),
+        carteIA(a.ia, e.ia)),
+      h('div', { class: 'colonne' },
       h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Constats' }), h('button', { class: 'btn sm flat', type: 'button', onclick: () => aller('constats') }, 'Tout voir')),
         ...distribution(a.distribution),
         h('header', {}, h('h2', { text: 'Priorités du moment' })),
         prio.length ? prio.map((p, i) => h('div', { class: 'priorite' }, h('span', { class: 'rang', text: i + 1 }), h('div', {}, h('strong', { text: p.titre }), p.texte ? h('small', { text: p.texte }) : null)))
           : h('p', { class: 'vide', text: 'Rien à corriger en priorité.' }),
         pistes.length ? h('header', {}, h('h2', { text: 'Pistes de l’IA' }), h('span', { class: 'note', text: 'à vérifier' })) : null,
-        ...pistes.map(p => h('div', { class: 'priorite' }, h('span', { class: 'rang', text: '·' }), h('div', {}, h('strong', { text: p.titre }), p.texte ? h('small', { text: p.texte }) : null))))),
-    carteIA(a.ia, e.ia),
-    h('div', { class: 'split mt12' },
-      h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Évolution du score' })), courbe(histo)),
-      carteSources(e.sources)));
+        ...pistes.map(p => h('div', { class: 'priorite' }, h('span', { class: 'rang', text: '·' }), h('div', {}, h('strong', { text: p.titre }), p.texte ? h('small', { text: p.texte }) : null)))),
+        carteSources(e.sources))));
 }
 
 function carteIA(ia = {}, reglage) {
   const entete = t => h('header', {}, h('h2', { text: 'Relecture de l’IA' }), h('span', { class: 'note', text: t }));
   if (ia.statut === 'faite') {
-    return h('div', { class: 'card mt12' }, entete(`${ia.moteur === 'locale' ? 'locale' : ia.moteur === 'cloud' ? 'en nuage' : 'locale puis nuage'} · ${ia.modele || ''}`),
+    return h('div', { class: 'card' }, entete(`${ia.moteur === 'locale' ? 'locale' : ia.moteur === 'cloud' ? 'en nuage' : 'locale puis nuage'} · ${ia.modele || ''}`),
       ia.synthese ? h('p', { class: 'synthese', text: ia.synthese }) : null,
       (ia.scenarios || []).map(x => h('div', { class: 'scenario' }, h('strong', { text: x.titre }), h('p', { text: x.explication }))),
       ia.erreurs?.length ? h('p', { class: 'hint pad-erreur', text: `Incidents : ${ia.erreurs.join(' ; ')}` }) : null,
@@ -251,7 +253,7 @@ function carteIA(ia = {}, reglage) {
     : ia.statut === 'ignoree' ? `Pas de relecture : ${ia.raison}${ia.erreurs?.length ? ` (${ia.erreurs.join(' ; ')})` : ''}.`
       : reglage.mode === 'aucune' ? 'Aucune IA choisie : l’audit vient du seul moteur de règles, complet sans elle.' + (admin ? ' Réglages → IA pour en brancher une, locale ou en nuage.' : '')
         : 'Cet audit n’a pas été relu.';
-  return h('div', { class: 'card mt12' }, entete(ia.statut === 'en cours' ? 'en cours' : reglage.mode), h('p', { class: 'synthese', text: texte }));
+  return h('div', { class: 'card' }, entete(ia.statut === 'en cours' ? 'en cours' : reglage.mode), h('p', { class: 'synthese', text: texte }));
 }
 
 // ---------- constats ----------
