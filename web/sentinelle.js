@@ -51,7 +51,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
       h('span', { class: 'dt' }, h('b', { text: m.hote || m.emetteur || '?' }), h('small', { text: ` ${m.programme || m.decodeur || ''} ` }), m.description,
         h('small', { text: [u.srcip && `depuis ${u.srcip}`, u.utilisateur && `compte ${u.utilisateur}`, u.url && u.url.slice(0, 60), u.commande && u.commande.slice(0, 60)].filter(Boolean).map(x => ' · ' + x).join('') })));
   };
-  const filtrer = () => { for (const l of direct.children) l.hidden = Number(l.dataset.niv) < niveauMin; };
+  const filtrer = () => { let n = 0; for (const l of direct.children) { l.hidden = Number(l.dataset.niv) < niveauMin; if (!l.hidden) n++; } direct.classList.toggle('tout-filtre', !n && direct.children.length > 0); };
   let source = null;
   const ouvrir = () => {
     if (!('EventSource' in window)) return;
@@ -63,6 +63,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
       const l = ligneDirect(m); l.hidden = Number(l.dataset.niv) < niveauMin;
       direct.prepend(l);
       while (direct.children.length > 150) direct.lastChild.remove();
+      if (!l.hidden) direct.classList.remove('tout-filtre'); else if (!direct.classList.contains('tout-filtre') && ![...direct.children].some(x => !x.hidden)) direct.classList.add('tout-filtre');
     };
     source.addEventListener('sentinelle', sur_);
     source.addEventListener('bouclier', sur_);
@@ -108,7 +109,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
       h('div', { class: 'grow1' }, h('strong', { class: 'ip', text: x.hote }),
         h('small', { text: `${pluriel(x.lignes, 'ligne')} · ${pluriel(x.evenements, 'événement')} · ${pluriel(x.alertes, 'alerte')} · dernière ${depuis(x.dernier)}` }),
         h('small', { text: Object.entries(x.programmes).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([p, n]) => `${p} ${n}`).join(' · ') })),
-      h('div', { class: 'fin' }, x.niveauMax ? chip(x.niveauMax) : h('span', { class: 'note', text: 'calme' }))))
+      h('div', { class: 'fin' }, x.niveauMax ? chip(x.niveauMax) : h('span', { class: 'dim', text: 'calme' }))))
       : [h('p', { class: 'vide', text: 'Aucun hôte n’a encore envoyé de journal.' })]));
 
     const src = b.parSource || [];
@@ -139,7 +140,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
       h('span', { class: `pastille g-${GRAV(a.niveau)}` }), h('strong', { text: a.hote || '?' }), h('span', { class: 'tronque', text: a.description }), chip(a.niveau)))
       : [h('p', { class: 'vide', text: 'Aucune alerte.' })]));
     apercuHotes.replaceChildren(...(etat.hotes.length ? etat.hotes.slice(0, 5).map(x => h('div', { class: 'ligne-courte' },
-      h('span', { class: `pastille g-${x.niveauMax ? GRAV(x.niveauMax) : 'safe'}` }), h('strong', { class: 'ip', text: x.hote }), h('span', { class: 'tronque', text: `${pluriel(x.alertes, 'alerte')} · ${depuis(x.dernier)}` }), x.niveauMax ? chip(x.niveauMax) : h('span', { class: 'note', text: 'calme' })))
+      h('span', { class: `pastille g-${x.niveauMax ? GRAV(x.niveauMax) : 'safe'}` }), h('strong', { class: 'ip', text: x.hote }), h('span', { class: 'tronque', text: `${pluriel(x.alertes, 'alerte')} · ${depuis(x.dernier)}` }), x.niveauMax ? chip(x.niveauMax) : h('span', { class: 'dim', text: 'calme' })))
       : [h('p', { class: 'vide', text: 'Aucun hôte.' })]));
     const n = (x, total) => (total > 5 ? `5 sur ${total}` : total ? String(total) : '');
     noteAlertes.textContent = n(0, etat.recentes.length); noteHotes.textContent = n(0, etat.hotes.length);
