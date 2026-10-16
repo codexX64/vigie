@@ -42,7 +42,8 @@ export class SentinelleVigie {
 
   surAlerte(a) {
     const r = this.reglage();
-    try { this.magasin.sentinelleAlerte(a); } catch (e) { this.log.warn?.(`[sentinelle] base : ${e.message}`); }
+    // L'heure gardée est celle de la réception : l'horodatage d'un journal est celui de l'hôte, parfois faux ou vieux.
+    try { this.magasin.sentinelleAlerte({ ...a, quand: a.recu || a.quand }); } catch (e) { this.log.warn?.(`[sentinelle] base : ${e.message}`); }
     const ip = a.champs.srcip;
     const points = POINTS(a.niveau);
     // Le bouclier : l'adresse qui attaque prend des points ; l'hôte qui montre
