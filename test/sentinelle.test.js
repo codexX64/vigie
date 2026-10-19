@@ -79,6 +79,23 @@ test('décodeurs : SSH, sudo, comptes, noyau, NAS, hyperviseur, web, repli', () 
   for (const dec of DECODEURS) for (const m of dec.motifs) assert.ok(m.regex instanceof RegExp && m.geste, `${dec.nom} : motif complet`);
 });
 
+test('décodeurs : une ligne hostile de 16 Kio, quel que soit le programme annoncé, se lit vite', () => {
+  // N'importe quel émetteur accepté écrit la ligne : une expression qui revient
+  // en arrière sur toute sa longueur figerait VIGIE entière.
+  const programmes = new Set(['', 'kernel', 'x']);
+  for (const dec of DECODEURS) for (const p of String(dec.programme?.source || '').replace(/[\^$()?:]/g, ' ').split(/[|\s]+/)) if (/^[\w.-]+$/.test(p)) programmes.add(p);
+  const morceaux = ['a', '1', '1.', ':', 'a:', ' ', 'from ', 'rhost=', '"', ';', 'COMMAND=', '/', '[', '::', 'ff:', '-', '|', '{"a":'];
+  const s = new Sentinelle({ vus: { vu: () => false, noter: () => {} }, log: silence });
+  let pire = { ms: 0 };
+  for (const p of programmes) for (const m of morceaux) {
+    const tete = `<13>Oct 19 12:00:00 hote ${p}${p ? '[1]: ' : ''}`;
+    const ligne = (tete + m.repeat(Math.ceil(16384 / m.length))).slice(0, 16384);
+    const t = performance.now(); s.traiter(ligne, { emetteur: '10.0.0.1', quand: 0 }); const ms = performance.now() - t;
+    if (ms > pire.ms) pire = { ms, p, m };
+  }
+  assert.ok(pire.ms < 60, `ligne lue en ${pire.ms.toFixed(0)} ms (programme « ${pire.p} », motif ${JSON.stringify(pire.m)})`);
+});
+
 // ---------- règles ----------
 test('règles : arbre cohérent, niveaux 0-15, gravités', () => {
   const ids = new Set();

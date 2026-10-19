@@ -202,8 +202,8 @@ export const DECODEURS = [
   ] },
   // ---- Wi-Fi (hostapd, UniFi AP) ----
   { nom: 'wifi', programme: /^(?:hostapd|wpa_supplicant)$/, motifs: [
-    { regex: re(String.raw`(?<interface>\S+): (?:AP-STA-CONNECTED|STA|AP-STA-DISCONNECTED) (?<mac>(?:[0-9a-f]{2}:){5}[0-9a-f]{2})(?: IEEE 802\.11: (?<quoi>associated|disassociated|deauthenticated|authenticated))?`), geste: 'wifi.*' },
-    { regex: re(String.raw`(?<interface>\S+): STA (?<mac>(?:[0-9a-f]{2}:){5}[0-9a-f]{2}) IEEE 802\.1X: authentication failed`), geste: 'auth.echec' },
+    { regex: re(String.raw`^(?<interface>[^\s:]{1,32}): (?:AP-STA-CONNECTED|STA|AP-STA-DISCONNECTED) (?<mac>(?:[0-9a-f]{2}:){5}[0-9a-f]{2})(?: IEEE 802\.11: (?<quoi>associated|disassociated|deauthenticated|authenticated))?`), geste: 'wifi.*' },
+    { regex: re(String.raw`^(?<interface>[^\s:]{1,32}): STA (?<mac>(?:[0-9a-f]{2}:){5}[0-9a-f]{2}) IEEE 802\.1X: authentication failed`), geste: 'auth.echec' },
   ] },
   // ---- DHCP (ISC dhcpd, dnsmasq, Kea) ----
   { nom: 'dhcp', programme: /^(?:dhcpd|dnsmasq-dhcp|kea-dhcp4|udhcpd|isc-dhcp-server)$/, motifs: [
