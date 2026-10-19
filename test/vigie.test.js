@@ -250,6 +250,49 @@ test('autorisations : anonyme, lecture, membre, Hub, jeton dérivé', async () =
   assert.equal((await anonyme.get('/api/etat?x=1')).status, 400);
 });
 
+// Chaque route, son rôle de session et les jetons qui l'ouvrent. Une route
+// absente de cette table fait échouer l'essai : elle doit y entrer.
+const H = ['hub'], HD = ['hub', 'derive'];
+const DROITS = {
+  'GET /api/health': 'public', 'POST /api/sonde/eve': 'jeton de sonde', 'GET /api/bouclier/liste.txt': ['lecture', H],
+  'GET /api/etat': ['lecture', HD], 'GET /api/audits': ['lecture', HD], 'GET /api/audits/:id': ['lecture', HD], 'GET /api/audits/:id/pdf': ['lecture', HD],
+  'GET /api/constats': ['lecture', HD], 'GET /api/evenements': ['lecture', HD], 'GET /api/actions': ['lecture', H], 'GET /api/bouclier': ['lecture', HD],
+  'GET /api/sentinelle': ['lecture', HD], 'GET /api/sentinelle/alertes': ['lecture', HD], 'GET /api/sentinelle/regles': ['lecture', HD], 'GET /api/sentinelle/flux': ['lecture', []],
+  'POST /api/audits': ['membre', HD], 'POST /api/veille/passe': ['membre', H], 'POST /api/evenements/:id/acquitter': ['membre', H], 'POST /api/actions': ['membre', H],
+  'POST /api/constats/:id/appliquer': ['admin', H], 'POST /api/actions/:id/annuler': ['admin', H], 'POST /api/bouclier/bloquer': ['admin', H], 'POST /api/bouclier/blocages/:id/lever': ['admin', H],
+  ...Object.fromEntries(['GET /api/reglages', 'PUT /api/reglages/ia', 'POST /api/reglages/ia/essai', 'PUT /api/reglages/veille', 'PUT /api/reglages/reaction', 'PUT /api/reglages/docker',
+    'PUT /api/reglages/perimetre', 'PUT /api/reglages/billetterie', 'PUT /api/reglages/telegram', 'POST /api/reglages/diffusion/essai', 'PUT /api/reglages/bouclier',
+    'POST /api/bouclier/listes/actualiser', 'POST /api/bouclier/unifi/sonde', 'PUT /api/bouclier/unifi', 'POST /api/bouclier/unifi/synchroniser', 'POST /api/bouclier/cloudflare/sonde',
+    'PUT /api/bouclier/cloudflare', 'POST /api/bouclier/cloudflare/synchroniser', 'POST /api/bouclier/cloudflare/attaque', 'POST /api/bouclier/sondes', 'POST /api/bouclier/sondes/retirer',
+    'POST /api/bouclier/jeton-liste', 'PUT /api/reglages/sentinelle', 'POST /api/sentinelle/essai'].map(k => [k, ['admin', []]])),
+};
+
+test('autorisation : chaque route refuse l’anonyme, puis la lecture, le membre, le Hub et le jeton dérivé selon la table', async () => {
+  const rang = { lecture: 0, membre: 1, admin: 2 };
+  const anonyme = new Client(port);
+  let n = 0;
+  for (const route of vigie.api.routeur.routes) {
+    const motif = route.re.source.replace(/^\^/, '').replace(/\$$/, '').replace(/\\(.)/g, '$1');
+    let i = 0;
+    const cle = `${route.methode} ${motif.replace(/\(\[\^\/\]\+\)/g, () => `:${route.cles[i++]}`)}`;
+    const d = DROITS[cle];
+    assert.ok(d, `${cle} : absente de la table des droits`);
+    if (d === 'public') continue;
+    n++;
+    const chemin = cle.split(' ')[1].replace(/:\w+/g, 'abcdefghijkl');
+    const corps = route.methode === 'GET' || route.methode === 'DELETE' ? undefined : {};
+    const r0 = await anonyme.req(route.methode, chemin, corps);
+    assert.equal(r0.status, 401, `${cle} anonyme : ${r0.status}`);
+    if (!Array.isArray(d)) continue;
+    const [role, jetons] = d;
+    if (rang[role] >= 1) assert.equal((await lecteur.req(route.methode, chemin, corps)).status, 403, `${cle} lecture`);
+    if (rang[role] >= 2) assert.equal((await membre.req(route.methode, chemin, corps)).status, 403, `${cle} membre`);
+    if (!jetons.includes('hub')) assert.ok([401, 403].includes((await hub(route.methode, chemin, corps)).status), `${cle} : le jeton du Hub n’ouvre pas`);
+    if (!jetons.includes('derive')) assert.ok([401, 403].includes((await mml(route.methode, chemin, corps)).status), `${cle} : un jeton dérivé n’ouvre pas`);
+  }
+  assert.equal(n, Object.values(DROITS).filter(x => x !== 'public').length, 'chaque route de la table existe');
+});
+
 test('audit sans IA puis avec l’IA locale : constats, score, relecture, SYNAPSE, PDF', async () => {
   let r = await auditFini(admin, { ia: false });
   assert.equal(r.audit.statut, 'termine');
