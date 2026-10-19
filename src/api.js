@@ -185,9 +185,10 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
   });
   r.get('/api/constats', ctx => {
     acces(ctx, LECTURE);
+    const { appareil } = ctx.q;
     const a = magasin.dernierAudit();
     if (!a) return { audit: null, constats: [] };
-    return { audit: { id: a.id, debut: a.debut, score: a.score }, constats: magasin.constats(a.id).filter(c => c.sujetId === ctx.q.appareil) };
+    return { audit: { id: a.id, debut: a.debut, score: a.score }, constats: magasin.constats(a.id).filter(c => c.sujetId === appareil) };
   }, { requete: Q.constats });
   r.get('/api/evenements', ctx => {
     acces(ctx, LECTURE);
@@ -533,6 +534,8 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
       if (!schema && ctx.url.search) throw new ErreurHttp(400, 'Paramètres de requête inattendus.');
       Object.defineProperty(ctx, 'q', { configurable: true, get: () => valider(Object.fromEntries(ctx.url.searchParams), schema || {}) });
       const reponse = await t.route.gestionnaire(ctx);
+      // Une route qui n'a pas lu ses paramètres (une branche qui rend tôt) les fait valider ici, avant de répondre.
+      if (schema && ctx.url.search && !ctx.res.headersSent) void ctx.q;
       if (reponse !== undefined) repondreJson(ctx.res, 200, reponse);
       return true;
     },

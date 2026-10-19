@@ -176,6 +176,16 @@ test('réponses des voisins : JSON lu jusqu’à une taille permise, au-delà ab
   await assert.rejects(s.appel('http://voisin', 'j', '/api/devices'), /réponse de plus de/);
 });
 
+test('paramètres : un paramètre inconnu est refusé, même quand la route rend avant de les lire', async () => {
+  // Comme avant le premier audit : la route rend tout de suite.
+  const avant = vigie.magasin.dernierAudit;
+  vigie.magasin.dernierAudit = () => null;
+  try {
+    assert.equal((await lecteur.get('/api/constats?appareil=a&script=id')).status, 400);
+    assert.equal((await lecteur.get('/api/constats?appareil=a')).status, 200);
+  } finally { vigie.magasin.dernierAudit = avant; }
+});
+
 test('jetons dérivés : seul le calcul exact avec le jeton de VIGIE passe', () => {
   assert.equal(nomDerive(JETON_HUB, derive(JETON_HUB, 'mapmylan')), 'mapmylan');
   assert.equal(nomDerive(JETON_HUB, derive('un-autre-secret-bien-long-0123', 'mapmylan')), null);
