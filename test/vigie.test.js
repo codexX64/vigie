@@ -555,3 +555,31 @@ test('rotation de SOCLE_CLE : les secrets de VIGIE sont rescellés, rien n’est
     assert.equal(v.magasin.secret('bouclier', 'cloudflareJeton'), 'jeton-cloudflare-de-l-essai-0123', 'sous la seule clé neuve');
   } finally { await v?.arreter(); }
 });
+
+test('ligne de commande : sauvegarde chiffrée pour une clé publique, restaurée ailleurs ; secrets retirés pour un incident', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { DatabaseSync } = await import('node:sqlite');
+  const crypto = await import('node:crypto');
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 3072, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } });
+  const cli = (args, entree) => execFileSync(process.execPath, ['--disable-warning=ExperimentalWarning', path.resolve(import.meta.dirname, '..', 'src', 'cli.js'), ...args],
+    { input: entree, env: { ...process.env, DATA_DIR: path.join(tmp, 'data'), VIGIE_HUB_TOKEN: JETON_HUB }, stdio: ['pipe', 'pipe', 'pipe'] });
+  vigie.magasin.poserSecret('telegram', 'jeton', JETON_TG);
+  const sauv = cli(['sauvegarde'], publicKey);
+  assert.ok(!sauv.includes(Buffer.from('SQLite format')), 'la sauvegarde est chiffrée');
+  const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'vigie-restaure-'));
+  try {
+    const pem = path.join(dossier, 'cle.pem');
+    fs.writeFileSync(pem, privateKey, { mode: 0o600 });
+    cli(['restaurer', pem, path.join(dossier, 'vigie.db')], sauv);
+    const copie = new DatabaseSync(path.join(dossier, 'vigie.db'), { readOnly: true });
+    const tg = JSON.parse(copie.prepare("SELECT valeur FROM reglages WHERE cle = 'telegram'").get().valeur);
+    copie.close();
+    assert.ok(tg.jeton && !JSON.stringify(tg).includes(JETON_TG), 'restaurée, secrets toujours scellés');
+    assert.throws(() => cli(['restaurer', pem, path.join(dossier, 'vigie.db')], ''), e => /existe déjà/.test(String(e.stderr)), 'jamais par-dessus une base');
+  } finally { fs.rmSync(dossier, { recursive: true, force: true }); }
+  assert.match(cli(['secrets', 'retirer', 'telegram']).toString(), /retirés : telegram\.jeton/);
+  assert.equal(vigie.magasin.secret('telegram', 'jeton'), '');
+  assert.throws(() => cli(['secrets', 'retirer', 'inconnu']), e => /canal inconnu/.test(String(e.stderr)));
+  const actions = vigie.db.prepare("SELECT action FROM socle_journal WHERE action IN ('sauvegarde.faite', 'secrets.retires')").all().map(x => x.action);
+  assert.deepEqual(actions.sort(), ['sauvegarde.faite', 'secrets.retires']);
+});

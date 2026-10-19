@@ -61,6 +61,27 @@ se pose dans VIGIE → Réglages.
 Seule, sans le Hub : `docker compose up -d --build` avec un `.env` (voir
 `docker-compose.yml`).
 
+### Sauvegardes
+
+Une sauvegarde est un instantané cohérent de la base, chiffré pour une clé
+publique RSA (3072 bits au moins) dont la clé privée ne vit **pas** sur la
+machine de VIGIE.
+
+```bash
+# Une fois, sur le poste qui gardera la clé privée :
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out vigie-sauvegarde.pem
+openssl pkey -in vigie-sauvegarde.pem -pubout -out vigie-sauvegarde.pub
+# Chaque jour, sur l'hôte de VIGIE (la clé publique suffit) :
+docker exec -i <vigie> node src/cli.js sauvegarde < vigie-sauvegarde.pub > vigie-$(date -u +%F).sauv
+# Restauration, sur le poste de la clé privée, dans un fichier neuf :
+node src/cli.js restaurer vigie-sauvegarde.pem vigie.db < vigie-AAAA-MM-JJ.sauv
+```
+
+**Incident.** `docker exec <vigie> node src/cli.js secrets retirer` oublie la
+clé d'IA, les jetons Telegram, docker-control, UniFi, Cloudflare et de la liste
+des pare-feu, et la clé de la billetterie (ou ceux d'un seul canal) ; les
+révoquer aussi chez leur fournisseur. Voir SECURITY.md, « Incident runbook ».
+
 ## Bouclier
 
 VIGIE ne réécrit pas un moteur d'inspection de paquets : il pilote ceux qui

@@ -100,7 +100,7 @@ export const DEFAUTS = {
   // correler : les alertes nourrissent le bouclier (score des adresses).
   sentinelle: { actif: true, seuil: 7, seuilEvenement: 10, correler: true, retentionJours: 30 },
 };
-const SCELLES = { ia: ['cle'], docker: ['jeton'], billetterie: ['cle'], telegram: ['jeton'], bouclier: ['cleUnifi', 'jetonListe', 'cloudflareJeton'] };
+export const SCELLES = { ia: ['cle'], docker: ['jeton'], billetterie: ['cle'], telegram: ['jeton'], bouclier: ['cleUnifi', 'jetonListe', 'cloudflareJeton'] };
 
 const json = (s, defaut) => { try { return s ? JSON.parse(s) : defaut; } catch { return defaut; } };
 
