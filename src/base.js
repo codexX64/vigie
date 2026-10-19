@@ -19,6 +19,8 @@ export const TYPES_PROTEGES = ['router', 'firewall', 'switch', 'ap', 'server', '
 
 const MAX_AUDITS = 200;
 const MAX_EVENEMENTS = 5000;
+// Qui a isolé, rendu ou balayé quel appareil : gardé un an, comme le journal de sécurité.
+const ACTIONS_JOURS = 365;
 
 export function ouvrirBase(dossier) {
   fs.mkdirSync(dossier, { recursive: true, mode: 0o700 });
@@ -265,6 +267,7 @@ export class Magasin {
     const id = nouvelleRef();
     this.db.prepare('INSERT INTO actions(id, quand, type, cible, cible_nom, auteur, motif, automatique, etat, avant, resultat) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
       .run(id, Date.now(), type, cible, cibleNom, auteur, motif.slice(0, 300), automatique ? 1 : 0, etat, JSON.stringify(avant), String(resultat).slice(0, 1000));
+    this.db.prepare('DELETE FROM actions WHERE quand < ?').run(Date.now() - ACTIONS_JOURS * 86400e3);
     return this.action(id);
   }
   ligneAction(a) {

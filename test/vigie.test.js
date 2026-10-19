@@ -629,3 +629,9 @@ test('adresses saisies : jamais le lien local ni les métadonnées d’un nuage,
   assert.equal(appels.length, 0);
   assert.match(m.public().find(x => x.id === 'propre-1').erreur, /métadonnées/);
 });
+
+test('actions : gardées un an, pas davantage', () => {
+  vigie.db.prepare("INSERT INTO actions(id, quand, type, cible, cible_nom, auteur, motif, automatique, etat, avant, resultat) VALUES('vieille-actio', ?, 'scan', 'reseau', '', 'ana', '', 0, 'appliquee', '{}', '')").run(Date.now() - 400 * 86400e3);
+  vigie.magasin.noterAction({ type: 'scan', cible: 'reseau', auteur: 'ana', etat: 'appliquee' });
+  assert.equal(vigie.magasin.action('vieille-actio'), undefined);
+});
