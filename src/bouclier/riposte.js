@@ -195,7 +195,7 @@ export class Riposte {
     return this.synchroEnCours;
   }
 
-  // ---- Cloudflare, en amont ----
+  // Cloudflare, en amont
   cloudflare() {
     const r = this.reglage();
     const jeton = this.magasin.secret('bouclier', 'cloudflareJeton');

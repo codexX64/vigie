@@ -26,12 +26,12 @@ const MOTS_MAUVAIS = /\b(?:denied|refused|unauthorized|forbidden|rejected|fatal|
 const SERVICE_CRITIQUE = /(?:ssh|sshd|docker|containerd|nginx|apache2|httpd|caddy|traefik|fail2ban|crowdsec|ufw|firewalld|nftables|iptables|wg-quick|openvpn|unbound|dnsmasq|pihole|pve-?\w*|corosync|smbd|nfs|postgres\w*|mariadb|mysql|redis|vaultwarden|home-?assistant|grafana|prometheus|rsyslog|syslog-ng|auditd|apparmor|clamav|zfs-\w+|mdmonitor|smartd|cron)/i;
 
 export const REGLES = [
-  // ======== bruit assumé : niveau 0, la ligne est comptée et oubliée ========
+  // Bruit assumé : niveau 0, la ligne est comptée et oubliée
   { id: 'bruit.session', niveau: 0, groupes: ['bruit'], geste: /^session\.(?:ouverte|fermee)$/, decodeur: /^(?:cron|pam)$/, champs: { application: /^(?:cron|crond|systemd-user|sudo)$/ }, description: 'session de tâche planifiée' },
   { id: 'bruit.cron', niveau: 0, groupes: ['bruit'], geste: 'planif.commande', champs: { commande: /^(?:\s*\[ -x \/usr\/lib\/php|run-parts|\/usr\/lib\/sysstat|test -x|command -v debian-sa1|\/usr\/bin\/certbot|cd \/ && run-parts)/ }, description: 'tâche planifiée de maintenance' },
   { id: 'bruit.dns', niveau: 0, groupes: ['bruit', 'dns'], geste: 'dns.requete', silence: true, description: 'résolution DNS ordinaire' },
 
-  // ======== SSH ========
+  // SSH
   { id: 'ssh.echec', niveau: 5, groupes: ['auth', 'auth-echec', 'ssh'], decodeur: /^(?:sshd|dropbear)$/, geste: 'auth.echec', description: 'mot de passe ou clé SSH refusé' },
   { id: 'ssh.echec-root', niveau: 7, groupes: ['auth', 'auth-echec', 'ssh'], si: 'ssh.echec', champs: { utilisateur: ROOT }, ignorer: 60, description: 'tentative SSH sur un compte d’administration' },
   { id: 'ssh.invalide', niveau: 5, groupes: ['auth', 'auth-echec', 'ssh', 'utilisateur-invalide'], decodeur: /^(?:sshd|dropbear)$/, geste: 'auth.invalide', description: 'connexion SSH sur un compte inexistant' },
@@ -49,7 +49,7 @@ export const REGLES = [
   { id: 'ssh.succes-apres-force-brute', niveau: 12, groupes: ['auth', 'auth-succes', 'ssh', 'force-brute', 'compromission'], si: 'ssh.ouverte', apres: { groupe: 'force-brute', fenetre: 1800, meme: ['srcip'] }, description: 'connexion SSH réussie après une force brute de la même adresse : compte probablement forcé' },
   { id: 'ssh.succes-apres-echecs', niveau: 10, groupes: ['auth', 'auth-succes', 'ssh', 'compromission'], si: 'ssh.ouverte', apres: { regle: 'ssh.echec', fenetre: 600, meme: ['srcip', 'utilisateur'], frequence: 3 }, description: 'connexion SSH réussie après plusieurs échecs du même compte depuis la même adresse' },
 
-  // ======== autres authentifications (services, NAS, hyperviseur, VPN, courrier…) ========
+  // Autres authentifications (services, NAS, hyperviseur, VPN, courrier…)
   { id: 'auth.echec', niveau: 5, groupes: ['auth', 'auth-echec'], geste: 'auth.echec', description: 'authentification refusée' },
   { id: 'auth.echec-admin', niveau: 7, groupes: ['auth', 'auth-echec'], si: 'auth.echec', champs: { utilisateur: ROOT }, ignorer: 60, description: 'authentification refusée sur un compte d’administration' },
   { id: 'auth.invalide', niveau: 5, groupes: ['auth', 'auth-echec', 'utilisateur-invalide'], geste: 'auth.invalide', description: 'authentification sur un compte inexistant' },
@@ -66,7 +66,7 @@ export const REGLES = [
   { id: 'vpn.poignee', niveau: 0, groupes: ['bruit', 'vpn'], geste: 'vpn.poignee', silence: true, description: 'poignée de main VPN' },
   { id: 'vpn.poignee.rafale', niveau: 6, groupes: ['vpn', 'sonde'], si: 'vpn.poignee', frequence: 30, fenetre: 60, meme: ['srcip'], ignorer: 300, description: 'rafale de poignées de main VPN de la même adresse' },
 
-  // ======== élévation de privilèges ========
+  // Élévation de privilèges
   { id: 'priv.commande', niveau: 3, groupes: ['priv', 'sudo'], geste: 'priv.commande', description: 'commande exécutée avec élévation' },
   { id: 'priv.commande.suspecte', niveau: 11, groupes: ['priv', 'sudo', 'commande-suspecte', 'compromission'], si: 'priv.commande', champs: { commande: CMD_SUSPECTE }, description: 'commande élevée au profil d’un post-exploitation (téléchargement exécuté, coquille inversée, effacement de traces, mineur…)' },
   { id: 'priv.premiere-fois', niveau: 4, groupes: ['priv', 'sudo', 'premiere-fois'], si: 'priv.commande', fts: ['hote', 'utilisateur'], description: 'première élévation de cet utilisateur sur cet hôte' },
@@ -75,7 +75,7 @@ export const REGLES = [
   { id: 'priv.echec.rafale', niveau: 10, groupes: ['priv', 'sudo', 'priv-echec', 'force-brute'], si: 'priv.echec', frequence: 3, fenetre: 300, meme: ['hote', 'utilisateur'], ignorer: 300, description: 'trois élévations refusées pour le même compte : devinette de mot de passe local' },
   { id: 'priv.coquille-root', niveau: 6, groupes: ['priv', 'sudo'], si: 'priv.commande', champs: { commande: /^(?:\/bin\/|\/usr\/bin\/)?(?:bash|sh|zsh|fish|su)\b|^(?:\/usr\/bin\/)?sudo\s+-[is]\b|^-i$/, cible: ROOT }, ignorer: 600, description: 'coquille d’administration ouverte par élévation' },
 
-  // ======== comptes et groupes ========
+  // Comptes et groupes
   { id: 'compte.cree', niveau: 8, groupes: ['compte', 'integrite'], geste: 'compte.cree', description: 'nouveau compte utilisateur' },
   { id: 'compte.cree.id-zero', niveau: 14, groupes: ['compte', 'integrite', 'compromission'], si: 'compte.cree', champs: { id: /^0$/ }, description: 'compte créé avec l’identifiant 0 : porte dérobée administrateur' },
   { id: 'compte.supprime', niveau: 8, groupes: ['compte', 'integrite'], geste: 'compte.supprime', description: 'compte utilisateur supprimé' },
@@ -87,7 +87,7 @@ export const REGLES = [
   { id: 'compte.cree-apres-intrusion', niveau: 13, groupes: ['compte', 'integrite', 'compromission'], si: 'compte.cree', apres: { groupe: 'compromission', fenetre: 3600, meme: ['hote'] }, description: 'compte créé sur un hôte où une compromission vient d’être signalée' },
   { id: 'compte.rafale', niveau: 12, groupes: ['compte', 'integrite', 'compromission'], si: 'compte.cree', frequence: 3, fenetre: 600, meme: ['hote'], description: 'plusieurs comptes créés d’affilée sur le même hôte' },
 
-  // ======== services ========
+  // Services
   { id: 'service.echec', niveau: 5, groupes: ['service'], geste: 'service.echec', ignorer: 120, description: 'un service a échoué' },
   { id: 'service.echec.boucle', niveau: 7, groupes: ['service', 'instabilite'], si: 'service.echec', frequence: 5, fenetre: 300, meme: ['hote', 'unite'], ignorer: 600, description: 'un service échoue en boucle' },
   { id: 'service.arrete', niveau: 3, groupes: ['service'], geste: 'service.arrete', description: 'service arrêté' },
@@ -97,7 +97,7 @@ export const REGLES = [
   { id: 'action.tache', niveau: 2, groupes: ['proxmox'], geste: 'action.tache', description: 'tâche Proxmox' },
   { id: 'action.tache.sensible', niveau: 7, groupes: ['proxmox', 'integrite'], si: 'action.tache', champs: { tache: /:(?:qmdestroy|vzdestroy|qmrestore|vzrestore|qmclone|vzclone|aptupdate|srvreload|stopall|startall|qmsnapshot|vzsnapshot|imgdel|download|move_volume|qmigrate):/ }, description: 'tâche Proxmox sensible (destruction, restauration, migration, mise à jour)' },
 
-  // ======== noyau ========
+  // Noyau
   { id: 'noyau.segfault', niveau: 6, groupes: ['noyau', 'instabilite'], geste: 'noyau.segfault', ignorer: 60, description: 'un processus a planté (segfault)' },
   { id: 'noyau.segfault.rafale', niveau: 9, groupes: ['noyau', 'instabilite', 'exploitation'], si: 'noyau.segfault', frequence: 5, fenetre: 120, meme: ['hote', 'processus'], ignorer: 300, description: 'le même programme plante en rafale : tentative d’exploitation probable' },
   { id: 'noyau.oom', niveau: 6, groupes: ['noyau', 'instabilite'], geste: 'noyau.oom', ignorer: 60, description: 'le noyau a tué un processus (mémoire épuisée)' },
@@ -110,7 +110,7 @@ export const REGLES = [
   { id: 'parefeu.paquet', niveau: 0, groupes: ['bruit', 'parefeu'], geste: 'parefeu.paquet', silence: true, description: 'paquet journalisé par le pare-feu de l’hôte' },
   { id: 'parefeu.balayage', niveau: 8, groupes: ['parefeu', 'reseau', 'balayage'], si: 'parefeu.paquet', frequence: 20, fenetre: 60, meme: ['hote', 'srcip'], ignorer: 300, description: 'balayage de ports sur l’hôte : vingt paquets journalisés de la même adresse en une minute' },
 
-  // ======== web ========
+  // Web
   // Sous web.requete, les précisions atomiques s'excluent (la première qui
   // correspond gagne) ; les règles de répétition portent leurs propres champs
   // pour compter quelle que soit la précision retenue.
@@ -127,11 +127,11 @@ export const REGLES = [
   { id: 'web.erreur', niveau: 4, groupes: ['web', 'web-erreur'], geste: 'web.erreur', ignorer: 60, description: 'erreur du serveur web' },
   { id: 'web.erreur.rafale', niveau: 8, groupes: ['web', 'web-attaque'], si: 'web.erreur', frequence: 20, fenetre: 60, meme: ['srcip'], ignorer: 300, description: 'rafale d’erreurs web de la même adresse' },
 
-  // ======== conteneurs ========
+  // Conteneurs
   { id: 'conteneur.mort', niveau: 4, groupes: ['conteneur', 'service'], geste: 'conteneur.mort', ignorer: 30, description: 'un conteneur s’est arrêté anormalement' },
   { id: 'conteneur.mort.boucle', niveau: 7, groupes: ['conteneur', 'service', 'instabilite'], si: 'conteneur.mort', frequence: 5, fenetre: 600, meme: ['hote', 'id'], ignorer: 600, description: 'un conteneur meurt en boucle' },
 
-  // ======== réseau local : DHCP, Wi-Fi, DNS ========
+  // Réseau local : DHCP, Wi-Fi, DNS
   { id: 'reseau.bail', niveau: 2, groupes: ['reseau', 'dhcp'], geste: 'reseau.bail', silence: true, description: 'bail DHCP' },
   { id: 'reseau.bail.nouveau', niveau: 7, groupes: ['reseau', 'dhcp', 'premiere-fois', 'nouvel-appareil'], si: 'reseau.bail', fts: ['mac'], description: 'adresse matérielle jamais vue : nouvel appareil sur le réseau' },
   { id: 'reseau.bail.rafale', niveau: 9, groupes: ['reseau', 'dhcp', 'deni-de-service'], si: 'reseau.bail', frequence: 30, fenetre: 60, meme: ['hote'], ignorer: 300, description: 'trente baux en une minute : épuisement DHCP ou tempête' },
@@ -146,18 +146,18 @@ export const REGLES = [
   { id: 'dns.rafale', niveau: 8, groupes: ['dns', 'reseau', 'exfiltration'], si: 'bruit.dns', frequence: 300, fenetre: 60, meme: ['srcip'], ignorer: 600, description: 'trois cents résolutions en une minute du même appareil : tunnel DNS ou logiciel emballé' },
   { id: 'dns.txt-rafale', niveau: 9, groupes: ['dns', 'reseau', 'exfiltration'], si: 'bruit.dns', champs: { type: /^(?:TXT|NULL|CNAME)$/ }, frequence: 40, fenetre: 60, meme: ['srcip'], ignorer: 600, description: 'rafale de requêtes TXT/NULL : tunnel DNS probable' },
 
-  // ======== tâches planifiées ========
+  // Tâches planifiées
   { id: 'planif.commande', niveau: 2, groupes: ['planif'], geste: 'planif.commande', silence: true, description: 'tâche planifiée exécutée' },
   { id: 'planif.commande.suspecte', niveau: 11, groupes: ['planif', 'commande-suspecte', 'compromission'], si: 'planif.commande', champs: { commande: CMD_SUSPECTE }, ignorer: 300, description: 'tâche planifiée au profil d’un implant (téléchargement exécuté, coquille inversée, mineur)' },
   { id: 'planif.modifie', niveau: 7, groupes: ['planif', 'integrite'], geste: 'planif.modifie', description: 'table de tâches planifiées modifiée' },
   { id: 'planif.modifie-apres-intrusion', niveau: 13, groupes: ['planif', 'integrite', 'compromission', 'persistance'], si: 'planif.modifie', apres: { groupe: 'compromission', fenetre: 3600, meme: ['hote'] }, description: 'tâches planifiées modifiées sur un hôte signalé compromis : persistance' },
 
-  // ======== gardiens ========
+  // Gardiens
   { id: 'gardien.ban', niveau: 7, groupes: ['gardien', 'force-brute'], geste: 'bannissement', champs: { quoi: /^(?:Ban|ban|decision)$/ }, description: 'adresse bannie par un gardien (fail2ban, CrowdSec)' },
   { id: 'gardien.ban.recidive', niveau: 10, groupes: ['gardien', 'force-brute'], si: 'gardien.ban', frequence: 3, fenetre: 86400, meme: ['srcip'], description: 'adresse bannie trois fois en un jour : récidiviste' },
   { id: 'gardien.unban', niveau: 2, groupes: ['gardien'], geste: 'bannissement', champs: { quoi: /^Unban$/ }, description: 'bannissement levé' },
 
-  // ======== repli : mots qui sentent mauvais, sans décodeur ========
+  // Repli : mots qui sentent mauvais, sans décodeur
   { id: 'texte.mauvais-mot', niveau: 2, groupes: ['texte'], geste: 'depot.texte', message: MOTS_MAUVAIS, ignorer: 60, description: 'ligne sans décodeur contenant un mot d’alerte' },
   { id: 'texte.intrusion', niveau: 9, groupes: ['texte', 'compromission'], si: 'texte.mauvais-mot', message: /\b(?:rootkit|backdoor|possible break-?in attempt|BREAK-IN|trojan|malware detected|virus found|exploit)\b/i, ignorer: 300, description: 'un programme signale lui-même une intrusion ou un code malveillant' },
   { id: 'texte.mauvais-mot.rafale', niveau: 7, groupes: ['texte'], si: 'texte.mauvais-mot', frequence: 30, fenetre: 60, meme: ['hote'], ignorer: 300, description: 'rafale de lignes d’erreur sur le même hôte' },

@@ -202,7 +202,7 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
   peindre_();
   return page;
 
-  // ---------- réglages ----------
+  // Réglages
   // Enregistrer puis repeindre la page entière : les cartes montrent l'état que le serveur a retenu.
   function enregistrer(corps, message) {
     return sur(async () => { await api.put('/api/reglages/bouclier', corps()); toast(message); await recharger(); });

@@ -95,7 +95,7 @@ function constat(regle, gravite, { sujet = '', sujetId = null, cle, titre, preuv
   return { cle: cle || `${regle}:${sujet || 'global'}`, regle, ref: r.ref, domaine: r.domaine, gravite, titre: titre || r.titre, sujet, sujetId, preuve, correction, action };
 }
 
-// ---------- versions en fin de vie ----------
+// Versions en fin de vie
 const vers = s => (String(s || '').match(/\d+(?:\.\d+){0,2}/)?.[0] || '').split('.').map(Number);
 const avant = (v, ref) => { for (let i = 0; i < ref.length; i++) { const a = v[i] ?? 0; if (a !== ref[i]) return a < ref[i]; } return false; };
 
@@ -122,7 +122,7 @@ export function systemeFinDeVie(os) {
   return null;
 }
 
-// ---------- règles ----------
+// Règles
 function surAppareils(d, ctx, out) {
   const m = d.mapmylan;
   for (const a of m.appareils) {

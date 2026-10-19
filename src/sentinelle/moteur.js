@@ -46,7 +46,7 @@ export class Sentinelle {
     this.flux = [];                // derniers événements (toute règle non silencieuse)
   }
 
-  // ---- conditions atomiques ----
+  // Conditions atomiques
   correspond(r, ev) {
     if (r.decodeur !== undefined && !this.egal(r.decodeur, ev.decodeur)) return false;
     if (r.programme !== undefined && !this.egal(r.programme, ev.programme)) return false;
@@ -58,7 +58,7 @@ export class Sentinelle {
   }
   egal(attendu, v) { return attendu instanceof RegExp ? attendu.test(v || '') : attendu === v; }
 
-  // ---- conditions composées ----
+  // Conditions composées
   frequence(r, ev, t) {
     const cle = `${r.id}|${cleDe(ev, r.meme || ['hote'])}`;
     let f = this.fenetres.get(cle);

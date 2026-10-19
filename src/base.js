@@ -160,7 +160,7 @@ export class Magasin {
     END;`);
   }
 
-  // ---- réglages ----
+  // Réglages
   reglage(nom) {
     const l = this.db.prepare('SELECT valeur FROM reglages WHERE cle = ?').get(nom);
     return { ...DEFAUTS[nom], ...json(l?.valeur, {}) };
@@ -187,7 +187,7 @@ export class Magasin {
   memoire(nom, defaut = null) { return json(this.db.prepare('SELECT valeur FROM reglages WHERE cle = ?').get(`_${nom}`)?.valeur, defaut); }
   poserMemoire(nom, valeur) { this.db.prepare('INSERT INTO reglages(cle, valeur) VALUES(?, ?) ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur').run(`_${nom}`, JSON.stringify(valeur)); }
 
-  // ---- audits ----
+  // Audits
   ouvrirAudit({ declencheur, auteur = '' }) {
     const id = nouvelleRef();
     this.db.prepare("INSERT INTO audits(id, debut, statut, declencheur, auteur) VALUES(?, ?, 'en cours', ?, ?)").run(id, Date.now(), declencheur, auteur);
@@ -244,7 +244,7 @@ export class Magasin {
   }
   constat(id) { return this.ligneConstat(this.db.prepare('SELECT * FROM constats WHERE id = ?').get(id)); }
 
-  // ---- événements de la veille ----
+  // Événements de la veille
   evenement({ gravite, type, titre, texte = '', sujet = '', cle = '' }) {
     const id = nouvelleRef();
     this.db.prepare('INSERT INTO evenements(id, quand, gravite, type, titre, texte, sujet, cle) VALUES(?,?,?,?,?,?,?,?)')
@@ -260,7 +260,7 @@ export class Magasin {
     return this.db.prepare('UPDATE evenements SET acquitte = ?, acquitte_par = ? WHERE id = ? AND acquitte IS NULL').run(Date.now(), qui, id).changes > 0;
   }
 
-  // ---- actions de remédiation ----
+  // Actions de remédiation
   noterAction({ type, cible, cibleNom = '', auteur, motif = '', automatique = false, etat, avant = {}, resultat = '' }) {
     const id = nouvelleRef();
     this.db.prepare('INSERT INTO actions(id, quand, type, cible, cible_nom, auteur, motif, automatique, etat, avant, resultat) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
@@ -280,7 +280,7 @@ export class Magasin {
   /** Les isolements automatiques de la dernière heure : la réaction rapide est bornée. */
   automatiquesRecentes(ms = 3600e3) { return this.db.prepare('SELECT COUNT(*) n FROM actions WHERE automatique = 1 AND quand > ?').get(Date.now() - ms).n; }
 
-  // ---- sentinelle : alertes des journaux d'hôtes, mémoire « première fois » ----
+  // Sentinelle : alertes des journaux d'hôtes, mémoire « première fois »
   sentinelleAlerte(a) {
     const id = nouvelleRef();
     this.db.prepare('INSERT INTO sentinelle_alertes(id, quand, hote, programme, regle, niveau, groupes, description, srcip, utilisateur, champs, extrait) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -317,7 +317,7 @@ export class Magasin {
   sentinelleVu(cle) { return !!this.db.prepare('SELECT 1 FROM sentinelle_vus WHERE cle = ?').get(cle); }
   sentinelleNoterVu(cle) { this.db.prepare('INSERT INTO sentinelle_vus(cle, quand) VALUES(?, ?) ON CONFLICT(cle) DO UPDATE SET quand = excluded.quand').run(cle, Date.now()); }
 
-  // ---- compteurs de l'IA (plafond quotidien) ----
+  // Compteurs de l'IA (plafond quotidien)
   usageIA(jour = new Date().toISOString().slice(0, 10)) { return this.db.prepare('SELECT appels, jetons FROM ia_usage WHERE jour = ?').get(jour) || { appels: 0, jetons: 0 }; }
   compterIA(jetons, jour = new Date().toISOString().slice(0, 10)) {
     this.db.prepare('INSERT INTO ia_usage(jour, appels, jetons) VALUES(?, 1, ?) ON CONFLICT(jour) DO UPDATE SET appels = appels + 1, jetons = jetons + excluded.jetons').run(jour, Math.max(0, Math.round(jetons || 0)));

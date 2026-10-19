@@ -105,7 +105,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
   const r = new Routeur();
   const { portail, journal, limiteur } = socle;
 
-  // ---- qui appelle ----
+  // Qui appelle
   const presente = ctx => { const a = String(ctx.req.headers.authorization || ''); return a.startsWith('Bearer ') ? a.slice(7) : ''; };
   const cleMachine = ctx => [`ip:machine:${ctx.ip}`];
   // Un jeton présenté est vérifié ; un faux compte comme un échec et ne retombe jamais sur la session.
@@ -155,7 +155,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
 
   r.get('/api/health', () => ({ ok: true }), { public: true });
 
-  // ---- lecture ----
+  // Lecture
   r.get('/api/etat', ctx => { acces(ctx, LECTURE); return etat(); });
   r.get('/api/audits', ctx => {
     acces(ctx, LECTURE);
@@ -197,7 +197,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
   }, { requete: Q.evenements });
   r.get('/api/actions', ctx => { acces(ctx, { jetons: ['hub'] }); return magasin.actions(100); });
 
-  // ---- audits et veille ----
+  // Audits et veille
   r.post('/api/audits', async ctx => {
     const qui = acces(ctx, { role: 'membre', jetons: ['hub', 'derive'] });
     const b = await corps(ctx, S.audit);
@@ -219,7 +219,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     return { ok: true };
   });
 
-  // ---- remédiation ----
+  // Remédiation
   r.post('/api/actions', async ctx => {
     const qui = acces(ctx, { role: 'membre', jetons: ['hub'] });
     const b = await corps(ctx, S.action);
@@ -250,7 +250,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     return await moteur.annuler(ctx.params.id, qui.nom).catch(actionErreur);
   });
 
-  // ---- réglages (session d'administrateur seulement) ----
+  // Réglages (session d'administrateur seulement)
   const reglages = () => ({
     ia: ia.etat(), veille: magasin.reglage('veille'), reaction: { ...magasin.reglage('reaction'), typesPossibles: TYPES_ISOLABLES },
     docker: { ...magasin.reglagePublic('docker'), url: cfg.dockerUrl || null }, perimetre: { ...magasin.reglage('perimetre'), plages: sources.perimetreCourant.plages },
@@ -352,7 +352,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     return out;
   });
 
-  // ---- bouclier ----
+  // Bouclier
   const vueBouclier = () => bouclier.etat();
   r.get('/api/bouclier', ctx => { acces(ctx, LECTURE); return vueBouclier(); });
   r.put('/api/reglages/bouclier', async ctx => {
@@ -414,7 +414,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     await corps(ctx, S.vide);
     return bouclier.riposte.synchroniser({ forcer: true });
   });
-  // ---- Cloudflare, en amont ----
+  // Cloudflare, en amont
   // Sonder un jeton (celui posé, ou un nouveau avant de l'enregistrer) : compte et zones lisibles.
   r.post('/api/bouclier/cloudflare/sonde', async ctx => {
     admin(ctx);
@@ -499,7 +499,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     ctx.res.end(t);
   }, { public: true, requete: Q.liste });
 
-  // ---- sentinelle : les journaux d'hôtes ----
+  // Sentinelle : les journaux d'hôtes
   r.get('/api/sentinelle', ctx => { acces(ctx, LECTURE); return sentinelle.etat(); });
   r.get('/api/sentinelle/alertes', ctx => { acces(ctx, LECTURE); const q = ctx.q; return sentinelle.alertes({ limite: q.limite || 100, depuis: q.depuis || 0, niveau: q.niveau || 0, hote: q.hote || '', regle: q.regle || '', srcip: q.srcip || '' }); }, { requete: Q.sentinelle });
   r.get('/api/sentinelle/regles', ctx => { acces(ctx, LECTURE); return sentinelle.regles(); });

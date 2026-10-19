@@ -35,7 +35,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
   let pause = false;
   let fluxOk = false;
 
-  // ---- le direct ----
+  // Le direct
   const ligneDirect = m => {
     if (m.genre === 'bouclier') {
       const g = m.type === 'ips' ? (m.gravite === 1 ? 'critique' : m.gravite === 2 ? 'eleve' : 'faible') : 'info';
@@ -75,7 +75,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
     [[1, 'tout'], [3, 'niveau 3 et plus'], [5, 'niveau 5 et plus'], [7, 'niveau 7 et plus (alertes)'], [10, 'niveau 10 et plus']].map(([v, t]) => h('option', { value: v, text: t, selected: v === niveauMin })));
   const btnPause = h('button', { class: 'btn sm', type: 'button', onclick: () => { pause = !pause; btnPause.textContent = pause ? 'Reprendre' : 'Pause'; } }, 'Pause');
 
-  // ---- les vues ----
+  // Les vues
   let peindre_ = () => {
     const e = etat;
     const s = e.stats;
@@ -185,7 +185,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
   ouvrir();
   return page;
 
-  // ---------- réglages ----------
+  // Réglages
   function enregistrer(corps, message) { return sur(async () => { await api.put('/api/reglages/sentinelle', corps()); toast(message); await recharger(); }); }
   function carteReglages() {
     const r = reglages;
@@ -204,7 +204,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
       h('div', { class: 'actions mt12' }, h('button', { class: 'btn solid', type: 'button', onclick: enregistrer(() => ({ actif: actif.valeur(), correler: correler.valeur(), seuil: Number(seuil.value), seuilEvenement: Number(seuilEv.value), retentionJours: Number(retention.value) }), 'Sentinelle enregistrée.') }, 'Enregistrer'))));
   }
 
-  // ---------- essai d'une ligne ----------
+  // Essai d'une ligne
   var essai;
   function carteEssai() {
     const ligne = h('textarea', { class: 'field mono', rows: 3, placeholder: '<38>Oct 15 10:00:01 serveur sshd[1234]: Failed password for root from 203.0.113.7 port 51234 ssh2', spellcheck: 'false', 'aria-label': 'Ligne de journal' });
@@ -228,7 +228,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
     return essai;
   }
 
-  // ---------- brancher un hôte ----------
+  // Brancher un hôte
   function carteBrancher() {
     const port = etat.port || 5514;
     const bloc = (titre, texte) => h('details', { class: 'mt9' }, h('summary', { text: titre }), h('pre', { class: 'mono coupe conf', text: texte }));
@@ -242,7 +242,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
       bloc('OpenWrt / UniFi (dropbear)', `# OpenWrt : System → Logging → External system log server : ADRESSE_DE_VIGIE, port ${port}\n# UniFi : Réglages → System → Remote logging (SIEM) : déjà branché pour le bouclier ; les journaux système y passent aussi.`)));
   }
 
-  // ---------- référence des règles ----------
+  // Référence des règles
   function carteRegles() {
     const corps = h('div', {});
     const det = h('details', { class: 'card mt12 regles-ref', ontoggle: sur(async () => {

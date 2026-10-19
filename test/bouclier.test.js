@@ -37,7 +37,7 @@ const magasinNeuf = () => { const db = ouvrirBase(path.join(tmp, `m${++n}`)); re
 
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-// ---------- adresses ----------
+// Adresses
 test('adresses : forme unique, plages, ensembles fusionnés, public et interne', () => {
   assert.equal(normaliser('2001:0DB8:0:0:0:0:0:1'), '2001:db8::1');
   assert.equal(normaliser('[2606:4700:4700::1111]'), '2606:4700:4700::1111');
@@ -59,7 +59,7 @@ test('adresses : forme unique, plages, ensembles fusionnés, public et interne',
   assert.ok(estInterne('10.9.1.1') && estInterne('fd00::1') && !estInterne(ATTAQUANT));
 });
 
-// ---------- journaux ----------
+// Journaux
 test('journaux : syslog 3164 et 5424, CEF d’UniFi, pare-feu, EVE de Suricata', () => {
   assert.equal(messageSyslog('<134>Oct 13 10:00:00 passerelle kernel: [WAN_IN-D-2000] IN=eth8 SRC=1.2.3.4'), 'kernel: [WAN_IN-D-2000] IN=eth8 SRC=1.2.3.4');
   assert.equal(messageSyslog('<14>1 2026-10-13T10:00:00Z passerelle app - - - bonjour'), 'bonjour');
@@ -96,7 +96,7 @@ test('journaux : syslog 3164 et 5424, CEF d’UniFi, pare-feu, EVE de Suricata',
   assert.equal(lireLigne(`<14>Oct 13 10:00:00 sonde-1 suricata: {"event_type":"alert","src_ip":"${ATTAQUANT}","dest_ip":"10.9.1.9","alert":{"severity":1,"signature":"x","signature_id":1}}`).gravite, 1);
 });
 
-// ---------- listes de menaces ----------
+// Listes de menaces
 test('listes de menaces : formats, adresses non publiques écartées, cache sur disque, parents de domaine', async () => {
   const sp = lire(FLUX['spamhaus-drop'], `{"cidr":"45.155.205.0/24","sblid":"SBL1"}\n{"cidr":"10.0.0.0/8"}\n{"type":"metadata"}\npas du json`);
   assert.deepEqual(sp.ips, ['45.155.205.0/24']);
@@ -143,7 +143,7 @@ test('listes de menaces : formats, adresses non publiques écartées, cache sur 
   assert.deepEqual(m2.ipListee(C2), []);
 });
 
-// ---------- corrélation ----------
+// Corrélation
 function correlateur(reglage = {}, listees = {}) {
   let t = Date.parse('2026-10-13T10:00:00Z');
   const verdicts = [];
@@ -214,7 +214,7 @@ test('corrélation : balayages, force brute, listes, serveur de commande, machin
   assert.ok(c.menacesActuelles({ interne: true }).some(x => x.ip === '10.9.1.81' && x.score === 5));
 });
 
-// ---------- riposte ----------
+// Riposte
 function riposte(reglage = {}, unifi = null, cloudflare = null) {
   const { db, magasin } = magasinNeuf();
   magasin.poserReglage('bouclier', reglage);
@@ -320,7 +320,7 @@ test('riposte : la passerelle reçoit la liste, une panne est signalée une fois
   assert.equal((await r.synchroniser()).ok, true);
 });
 
-// ---------- UniFi, TLS épinglé ----------
+// UniFi, TLS épinglé
 function certificat() {
   const d = path.join(tmp, 'cert');
   fs.mkdirSync(d, { recursive: true });
@@ -397,7 +397,7 @@ test('UniFi : empreinte vérifiée avant toute requête, listes créées puis mi
   } finally { srv.close(); }
 });
 
-// ---------- récepteur syslog ----------
+// Récepteur syslog
 const portLibre = () => new Promise(r => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
 
 test('récepteur : UDP et TCP (lignes et cadrage par longueur), émetteurs filtrés', async () => {
@@ -438,7 +438,7 @@ test('récepteur : UDP et TCP (lignes et cadrage par longueur), émetteurs filtr
   assert.deepEqual([vues.length, r2.stats.refusees, r2.stats.debordees], [1, 5000, 0]);
 });
 
-// ---------- la passerelle par MapMyLAN ----------
+// La passerelle par MapMyLAN
 test('passerelle par MapMyLAN : reliée seule, liste confiée, alertes de l’IPS relevées sans doublon, syslog et clé directe prioritaires', async () => {
   const { db, magasin } = magasinNeuf();
   const appels = [];
@@ -522,7 +522,7 @@ test('alerte de l’IPS relue par MapMyLAN : même forme qu’une alerte syslog'
   assert.equal(depuisPasserelle(null), null);
 });
 
-// ---------- l'API, de bout en bout ----------
+// L'API, de bout en bout
 let vigie, admin;
 const JETON_HUB = 'jeton-du-hub-pour-le-bouclier-0123456789';
 const INSTALL = 'jeton-d-installation-du-bouclier';
@@ -628,7 +628,7 @@ test('API : réglages du bouclier validés, listes actualisées, passerelle déc
 });
 
 
-// ---------- Cloudflare et la tempête ----------
+// Cloudflare et la tempête
 /** Un faux Cloudflare : l'API v4 telle que VIGIE l'appelle, et ce qu'elle retient. */
 function fauxCloudflare() {
   const etat = { listes: [], items: null, regles: {}, niveau: { zone1: 'medium' }, appels: [] };

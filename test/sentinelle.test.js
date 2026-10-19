@@ -24,7 +24,7 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
 const ATTAQUANT = '45.155.205.10';
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-// ---------- pré-décodage ----------
+// Pré-décodage
 test('pré-décodage : RFC 3164, RFC 5424, ISO, ligne nue, noyau', () => {
   const t = Date.UTC(2026, 9, 15, 12, 0, 0);
   let p = predecoder('<38>Oct 14 10:00:01 srv1 sshd[1234]: Failed password', { maintenant: t });
@@ -42,7 +42,7 @@ test('pré-décodage : RFC 3164, RFC 5424, ISO, ligne nue, noyau', () => {
   assert.deepEqual([p.hote, p.programme, p.message], ['', '', 'juste du texte']);
 });
 
-// ---------- décodeurs ----------
+// Décodeurs
 test('décodeurs : SSH, sudo, comptes, noyau, NAS, hyperviseur, web, repli', () => {
   const d = l => { const pre = predecoder(l, { maintenant: 0 }); return decoder(pre); };
   let x = d('<38>Oct 14 10:00:01 s sshd[1]: Failed password for invalid user admin from 203.0.113.7 port 51234 ssh2');
@@ -101,7 +101,7 @@ test('décodeurs : une ligne hostile de 16 Kio, quel que soit le programme annon
   assert.ok(pire.ms < 60, `ligne lue en ${pire.ms.toFixed(0)} ms (programme « ${pire.p} », motif ${JSON.stringify(pire.m)})`);
 });
 
-// ---------- règles ----------
+// Règles
 test('règles : arbre cohérent, niveaux 0-15, gravités', () => {
   const ids = new Set();
   for (const r of REGLES) {
@@ -183,7 +183,7 @@ test('moteur : les fenêtres et les silences restent bornés', () => {
   assert.ok(s.hotes.size === 1);
 });
 
-// ---------- de bout en bout ----------
+// De bout en bout
 const portLibre = () => new Promise(r => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
 const JETON_HUB = 'jeton-du-hub-pour-la-sentinelle-0123456789';
 const INSTALL = 'jeton-d-installation-de-la-sentinelle';

@@ -133,7 +133,7 @@ const lancerAudit = sur(async () => {
   await aller('tableau');
 });
 
-// ---------- dessins ----------
+// Dessins
 const SVG = 'http://www.w3.org/2000/svg';
 const s = (tag, attrs = {}) => { const e = document.createElementNS(SVG, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
 
@@ -192,7 +192,7 @@ function carteSources(sources) {
     }));
 }
 
-// ---------- tableau de bord ----------
+// Tableau de bord
 async function pageTableau() {
   const e = await api.get('/api/etat');
   domaines = e.domaines;
@@ -256,7 +256,7 @@ function carteIA(ia = {}, reglage) {
   return h('div', { class: 'card' }, entete(ia.statut === 'en cours' ? 'en cours' : reglage.mode), h('p', { class: 'synthese', text: texte }));
 }
 
-// ---------- constats ----------
+// Constats
 async function pageConstats(q) {
   const e = await api.get('/api/etat');
   domaines = e.domaines;
@@ -327,7 +327,7 @@ async function pageConstats(q) {
   }
 }
 
-// ---------- historique ----------
+// Historique
 async function pageHistorique() {
   const audits = await api.get('/api/audits?limite=100');
   const ligne = a => {
@@ -348,7 +348,7 @@ async function pageHistorique() {
     h('div', { class: 'card' }, audits.length ? audits.map(ligne) : h('p', { class: 'vide', text: 'Aucun audit.' })));
 }
 
-// ---------- événements ----------
+// Événements
 async function pageEvenements() {
   let tous = false;
   const liste = h('div', {});
@@ -368,7 +368,7 @@ async function pageEvenements() {
 }
 const ligneCourte = (t, ctl) => h('span', { class: 'row' }, h('span', { text: t }), ctl);
 
-// ---------- actions ----------
+// Actions
 async function pageActions() {
   const liste = h('div', {});
   const peindre = async () => {
@@ -392,7 +392,7 @@ async function pageActions() {
     h('div', { class: 'card' }, liste));
 }
 
-// ---------- réglages ----------
+// Réglages
 async function pageReglages() {
   const r = await api.get('/api/reglages');
   return h('div', { class: 'page' },

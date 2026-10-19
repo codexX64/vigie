@@ -74,7 +74,7 @@ export class SentinelleVigie {
     }
   }
 
-  // ---- flux en direct (SSE) ----
+  // Flux en direct (SSE)
   diffuser(genre, corps) {
     const m = { n: ++this.compteFlux, genre, ...corps };
     this.tampon.push(m); if (this.tampon.length > 200) this.tampon.shift();
@@ -94,7 +94,7 @@ export class SentinelleVigie {
     res.on('close', fin); res.on('error', fin);
   }
 
-  // ---- vues ----
+  // Vues
   etat() {
     const m = this.moteurSentinelle.etat();
     const r = this.reglage();

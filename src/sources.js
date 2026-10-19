@@ -76,7 +76,7 @@ export class Sources {
     this.etat[nom] = { ok, quand: Date.now(), erreur: erreur ? String(erreur).slice(0, 160) : null, ...(n !== null ? { n } : {}) };
   }
 
-  // ---- lectures ----
+  // Lectures
   async lireMapmylan() {
     const [appareils, vlans, stats, alertes, plagesScan, dernierScan] = await Promise.all([
       this.mml('/api/devices'), this.mml('/api/vlans'), this.mml('/api/stats'),
@@ -182,7 +182,7 @@ export class Sources {
     return d;
   }
 
-  // ---- actions (par MapMyLAN) ----
+  // Actions (par MapMyLAN)
   async appareil(id) { return this.mml(`/api/devices/${encodeURIComponent(id)}`); }
   /** L'appareil de MapMyLAN qui porte une adresse (liste relue au plus une fois par minute). */
   async appareilParIp(ip) {

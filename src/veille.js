@@ -39,7 +39,7 @@ export class Moteur {
     };
   }
 
-  // ---------- audits ----------
+  // Audits
   /** Lance un audit ; un seul à la fois. Rend l'identifiant tout de suite, le travail continue. */
   lancer({ declencheur, auteur = '', ia = true }) {
     if (this.enCours) return { id: this.enCours.id, deja: true };
@@ -98,7 +98,7 @@ export class Moteur {
     this.magasin.poserIA(id, { statut: 'faite', moteur: res.moteur, modele: res.modele, synthese: res.synthese, scenarios: res.scenarios, priorites: res.priorites, corrections: res.corrections, erreurs: res.erreurs, memoire: !!memoire });
   }
 
-  // ---------- événements ----------
+  // Événements
   /** Un événement : noté, transmis (billetterie, Telegram, SYNAPSE), au plus une fois par six heures et par clé. */
   async signaler({ gravite, type, titre, texte = '', sujet = '', cle = '', forcer = false, diffuser = true }) {
     const memo = this.magasin.memoire('vus', {});
@@ -115,7 +115,7 @@ export class Moteur {
     return e;
   }
 
-  // ---------- veille ----------
+  // Veille
   /** Une passe de veille : relire les sources, comparer à la passe d'avant, signaler ce qui a changé. */
   async passe() {
     if (this.passeEnCours) return this.passeEnCours;
@@ -201,7 +201,7 @@ export class Moteur {
     return { evenements: sorties.length };
   }
 
-  // ---------- remédiation ----------
+  // Remédiation
   /** La réaction rapide : isoler seul, dans le périmètre fixé d'avance, et le dire. */
   async reagir(a, ev) {
     const r = this.magasin.reglage('reaction');
@@ -301,7 +301,7 @@ export class Moteur {
     return y;
   }
 
-  // ---------- horloge ----------
+  // Horloge
   demarrer() {
     const repris = this.magasin.reprendreInterrompus(this.maintenant());
     if (repris.audits || repris.relectures) this.log.warn?.(`[veille] ${repris.audits} audit(s) et ${repris.relectures} relecture(s) interrompus par l’arrêt précédent, marqués comme tels.`);

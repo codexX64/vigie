@@ -57,7 +57,7 @@ before(async () => {
 });
 after(async () => { await vigie?.arreter(); faux.serveur.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
 
-// ---------- pièces ----------
+// Pièces
 const collecte = () => {
   const e = etatInitial();
   return {
@@ -219,7 +219,7 @@ test('billetterie : le ticket suit le format ticket/v1 et regroupe par clé', ()
   assert.equal(t.dedup_key, 'vigie:intrusion:intrusion:AA');
 });
 
-// ---------- par HTTP ----------
+// Par HTTP
 test('autorisations : anonyme, lecture, membre, Hub, jeton dérivé', async () => {
   const anonyme = new Client(port);
   assert.equal((await anonyme.get('/api/health')).status, 200);
