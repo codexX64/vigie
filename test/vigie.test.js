@@ -14,6 +14,7 @@ import { rapportPdf, largeur } from '../src/pdf.js';
 import { nomDerive } from '../src/api.js';
 import { VERSION } from '../src/config.js';
 import { ticketDe } from '../src/diffusion.js';
+import { jsonBorne, ReponseTropGrande } from '../src/lecture.js';
 import { fauxServices, etatInitial, fausseSonde, derive, SEMENCE_MML, SEMENCE_NXR, SEMENCE_SYN, JETON_DOCKER, CLE_IA, JETON_TG, CLE_TICKET } from './faux.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vigie-'));
@@ -159,6 +160,20 @@ test('IA : la réponse est relue champ par champ, les liens et balises retirés'
   assert.equal(l[0].preuve.a.length, 160);
   assert.equal(l[0].preuve.b.length, 8);
   assert.equal(l[0].preuve.c.d.e, null, 'profondeur bornée');
+});
+
+test('réponses des voisins : JSON lu jusqu’à une taille permise, au-delà abandonné', async () => {
+  assert.deepEqual(await jsonBorne(new Response('{"a":1}'), 100), { a: 1 });
+  assert.equal(await jsonBorne(new Response('pas du json'), 100), null);
+  await assert.rejects(jsonBorne(new Response('x'.repeat(10), { headers: { 'content-length': '1000' } }), 100), ReponseTropGrande, 'taille annoncée');
+  let lus = 0;
+  const sansFin = new Response(new ReadableStream({ pull(c) { lus++; c.enqueue(new Uint8Array(64)); } }));
+  await assert.rejects(jsonBorne(sansFin, 1000), ReponseTropGrande);
+  assert.ok(lus < 40, 'la lecture s’arrête');
+  // Un voisin qui répond sans fin : la source est en erreur, VIGIE tient.
+  const { Sources } = await import('../src/sources.js');
+  const s = new Sources({ cfg: {}, magasin: { reglage: () => ({}) }, fetch: async () => new Response(new ReadableStream({ pull(c) { c.enqueue(new Uint8Array(1024 * 1024)); } })) });
+  await assert.rejects(s.appel('http://voisin', 'j', '/api/devices'), /réponse de plus de/);
 });
 
 test('jetons dérivés : seul le calcul exact avec le jeton de VIGIE passe', () => {

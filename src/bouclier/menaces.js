@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { EnsembleIp, estPublique } from './ip.js';
+import { lireBorne } from '../lecture.js';
 
 // id → définition. « poids » : ce qu'une présence sur la liste ajoute au score
 // d'une adresse vue (100 = blocage immédiat).
@@ -91,9 +92,8 @@ export class Menaces {
       try {
         const res = await this.fetch(def.url, { signal: AbortSignal.timeout(60_000), headers: { 'User-Agent': 'VIGIE (defensive network monitor)' } });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length > TAILLE_MAX) throw new Error('liste trop grande');
-        const texte = buf.toString('utf8');
+        // Lue morceau par morceau, abandonnée au-delà de la taille permise : jamais entière en mémoire d'abord.
+        const texte = (await lireBorne(res, TAILLE_MAX)).toString('utf8');
         const n = this.charger(id, texte);
         if (!n) throw new Error('liste vide ou illisible');
         fs.writeFileSync(this.fichier(id), texte, { mode: 0o600 });

@@ -3,6 +3,7 @@
 // Telegram (envoi seul, aucun bot qui écoute). Chacune a son seuil de gravité.
 import crypto from 'node:crypto';
 import { RANG } from './base.js';
+import { jsonBorne } from './lecture.js';
 
 const S = (v, max = 512) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/[\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, '').trim().slice(0, max);
 const echappe = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -64,7 +65,7 @@ export class Diffusion {
     const texte = `${ICONE[e.gravite] || ''} <b>VIGIE</b> — ${echappe(S(e.titre, 300))}${e.texte ? `\n${echappe(S(e.texte, 1500))}` : ''}`;
     try {
       const rep = await this.poster(`${this.tgApi}/bot${jeton}/sendMessage`, {}, { chat_id: r.chat, text: texte, parse_mode: 'HTML', disable_web_page_preview: true });
-      const j = await rep.json().catch(() => ({}));
+      const j = await jsonBorne(rep, 64 * 1024, {}).catch(() => ({}));
       const out = j?.ok ? { ok: true } : { ok: false, erreur: rep.status === 401 ? 'Jeton du bot refusé.' : S(j?.description || `Telegram a répondu ${rep.status}.`, 160) };
       this.etat.telegram = { ...out, quand: Date.now() };
       return out;

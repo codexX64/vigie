@@ -6,8 +6,10 @@
 // des réglages. VIGIE ne sonde ni n'isole rien en dehors.
 import net from 'node:net';
 import tls from 'node:tls';
+import { jsonBorne, ReponseTropGrande } from './lecture.js';
 
 const DELAI = 15_000;
+const REPONSE_MAX = 16 * 1024 * 1024;
 const MAX_SONDES_TLS = 60;
 const PARALLELE_TLS = 6;
 const PORTS_TLS = new Set([443, 8443, 9443, 4443, 636, 993, 995, 465, 5986]);
@@ -60,7 +62,8 @@ export class Sources {
     } catch (e) {
       throw new ErreurSource(e.name === 'TimeoutError' ? 'délai dépassé' : 'injoignable');
     }
-    const j = await r.json().catch(() => null);
+    let j = null;
+    try { j = await jsonBorne(r, REPONSE_MAX); } catch (e) { if (e instanceof ReponseTropGrande) throw new ErreurSource(e.message, r.status); }
     if (r.status === 401) throw new ErreurSource('jeton refusé', 401);
     if (r.status === 403) throw new ErreurSource('droit refusé', 403);
     if (!r.ok) throw new ErreurSource(String(j?.error || `HTTP ${r.status}`).slice(0, 160), r.status);

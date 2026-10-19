@@ -110,6 +110,11 @@ test('listes de menaces : formats, adresses non publiques écartées, cache sur 
     if (url === FLUX.feodo.url) return new Response(`${C2}\n`);
     if (url === FLUX['spamhaus-drop'].url) return new Response('{"cidr":"45.155.205.0/24"}\n');
     if (url === FLUX.threatfox.url) return new Response('127.0.0.1 c2.exemple.net\n');
+    // Une liste qui ne finit jamais : lue morceau par morceau, abandonnée à la taille permise.
+    if (url === FLUX['cins-army'].url) {
+      let n = 0;
+      return new Response(new ReadableStream({ pull(c) { if (++n > 200) return c.close(); c.enqueue(new Uint8Array(1024 * 1024).fill(0x31)); } }));
+    }
     return new Response('', { status: 503 });
   };
   const dossier = path.join(tmp, 'menaces');
@@ -124,6 +129,7 @@ test('listes de menaces : formats, adresses non publiques écartées, cache sur 
   assert.deepEqual(m.domaineListe('exemple.net'), [], 'le parent d’un domaine listé ne l’est pas');
   const pub = m.public();
   assert.equal(pub.find(x => x.id === 'urlhaus').erreur, 'HTTP 503');
+  assert.match(pub.find(x => x.id === 'cins-army').erreur, /réponse de plus de 40960 Kio/);
   assert.equal(pub.find(x => x.id === 'feodo').entrees, 1);
   // Pas de nouveau téléchargement avant l'échéance ; relu depuis le disque au redémarrage.
   appels.length = 0;

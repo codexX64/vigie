@@ -1,6 +1,8 @@
 // SYNAPSE : VIGIE y écrit chaque audit et chaque intervention, et lui demande
 // avant le diagnostic suivant ce qu'il en a retenu. Le jeton est dérivé par le
 // Hub pour VIGIE seul (cer_<nom>_…) ; SYNAPSE absent ne ralentit rien.
+import { jsonBorne } from './lecture.js';
+
 const FILE_MAX = 200, LOT = 50;
 
 export class Memoire {
@@ -20,7 +22,7 @@ export class Memoire {
       headers: { authorization: `Bearer ${this.jeton}`, 'content-type': 'application/json' }, body: JSON.stringify(corps),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json().catch(() => ({}));
+    return jsonBorne(r, 1024 * 1024, {}).catch(() => ({}));
   }
 
   raconter(e) {

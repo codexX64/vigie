@@ -11,6 +11,8 @@
 // messages d'alerte) : c'est une donnée, jamais une consigne. Le prompt le dit,
 // les champs sont bornés et nettoyés, et la réponse est relue champ par champ —
 // une IA ne peut ni changer une gravité ni le score, ni déclencher une action.
+import { jsonBorne, ReponseTropGrande } from './lecture.js';
+
 export const MODES_IA = ['aucune', 'locale', 'cloud', 'les-deux', 'secours'];
 export const FOURNISSEURS = { anthropic: 'Anthropic (Claude)', openai: 'OpenAI (GPT)', kimi: 'Moonshot (Kimi)' };
 export const STATUTS_IA = ['confirme', 'nuance', 'ecarte'];
@@ -19,6 +21,7 @@ const MAX_CONSTATS = 120;
 const MAX_SORTIE = 4000;
 const DELAI_LOCAL = 240_000;
 const DELAI_CLOUD = 120_000;
+const REPONSE_MAX = 2 * 1024 * 1024;
 
 const nettoie = (v, max = 300) => String(v ?? '')
   .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ')
@@ -152,7 +155,8 @@ export class IA {
     try {
       r = await this.fetch(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(delai), headers: { 'content-type': 'application/json', ...entetes }, body: JSON.stringify(corps) });
     } catch (e) { throw new Error(e.name === 'TimeoutError' ? 'délai dépassé' : 'injoignable'); }
-    const j = await r.json().catch(() => null);
+    let j = null;
+    try { j = await jsonBorne(r, REPONSE_MAX); } catch (e) { if (e instanceof ReponseTropGrande) throw new Error(e.message); }
     if (r.status === 401 || r.status === 403) throw new Error('clé refusée');
     if (r.status === 429) throw new Error('quota du fournisseur atteint');
     if (!r.ok) throw new Error(`erreur ${r.status}${j?.error?.message ? ` : ${nettoie(j.error.message, 120)}` : ''}`);
