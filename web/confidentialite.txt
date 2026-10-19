@@ -1,12 +1,119 @@
-VIGIE — ce qui est gardé
+VIGIE — CE QUE LE SERVICE GARDE, ET POURQUOI
 
-Comptes : identifiant, empreinte du mot de passe (Argon2id), facteurs (TOTP scellé, clés d'accès), sessions et journal de sécurité, comme tous les services du socle.
-Audits : pour chacun, le score, les constats (appareil concerné, preuve relevée — ports, versions, vulnérabilités —, correction proposée) et la relecture de l'IA. Les 200 derniers sont gardés.
-Veille : les événements (5 000 au plus) et un instantané du réseau (adresses, ports ouverts, VLAN) pour comparer une passe à la suivante.
-Actions : qui a isolé, rendu ou balayé quel appareil, quand, et l'état d'avant.
-Réglages : clé d'IA en nuage, jeton docker-control, clé de billetterie et jeton Telegram, scellés par la clé maîtresse.
+VIGIE est installé et exploité par la personne ou l'équipe qui l'héberge :
+c'est elle qui répond de ces données. Ce texte dit ce que le logiciel conserve,
+ce qu'il envoie ailleurs, et comment chacun exerce ses droits.
 
-Ce qui part ailleurs :
-- Le fournisseur d'IA en nuage choisi (Anthropic, OpenAI ou Moonshot), seulement en mode « cloud », « les-deux » ou « secours » : les constats de l'audit (noms d'appareils, adresses, ports, versions) pour relecture. En mode « locale », rien ne sort du réseau.
-- SYNAPSE (mémoire de la suite), s'il est relié : le résumé de chaque audit et de chaque intervention.
-- La billetterie et Telegram, s'ils sont configurés : les alertes au-delà du seuil choisi.
+1. CE QUI EST CONSERVÉ
+
+Comptes des opérateurs
+  - identifiant, nom affiché, rôle, dates de création et de dernière connexion ;
+  - empreinte Argon2id du mot de passe (le mot de passe lui-même n'est jamais
+    gardé), secret TOTP chiffré, clés publiques des clés d'accès avec leur nom,
+    empreintes des codes de secours ;
+  - adresse d'alerte, si l'opérateur en a vérifié une.
+  Finalité : se connecter et protéger le compte. Durée : tant que le compte existe.
+
+Sessions
+  - appareil (navigateur et système, sans empreinte), adresse IP, dates.
+  Finalité : lister et fermer ses appareils. Durée : douze heures au plus,
+  une heure sans activité.
+
+Événements de sécurité
+  - connexions, échecs, changements de facteurs, refus, réglages changés,
+    isolements, blocages et levées, sauvegardes, avec l'adresse IP.
+  Finalité : détecter un abus et répondre à un incident. Durée : cinquante
+  derniers événements par compte ; journal du service : 365 jours.
+
+Audits
+  - pour chacun : le score, les constats (appareil concerné, preuve relevée —
+    ports, versions, vulnérabilités —, correction proposée), la relecture de
+    l'IA et l'identifiant de l'opérateur qui l'a lancé.
+  Finalité : mesurer la sécurité du réseau et suivre son évolution. Durée : les
+  deux cents derniers.
+
+Veille
+  - les événements (nouveaux appareils, ports, signes d'intrusion), avec
+    l'identifiant de l'opérateur qui les a acquittés, et un instantané du réseau
+    (adresses, ports ouverts, VLAN) pour comparer une passe à la suivante.
+  Finalité : signaler ce qui change. Durée : cinq mille événements au plus ;
+  l'instantané est remplacé à chaque passe.
+
+Actions
+  - qui a isolé, rendu ou balayé quel appareil, quand, et l'état d'avant.
+  Finalité : pouvoir défaire une action et en répondre. Durée : un an.
+
+Bouclier
+  - les adresses vues dans les journaux de la passerelle et des sondes, avec
+    leur score, gardées en mémoire seulement (cinquante mille au plus, effacées
+    au redémarrage) ; les blocages posés et levés, avec l'opérateur, gardés
+    180 jours après leur fin ; les listes de menaces téléchargées.
+  Finalité : bloquer ce qui attaque le réseau.
+
+Sentinelle
+  - les alertes tirées des journaux des hôtes : hôte, programme, règle, niveau,
+    adresse source, compte concerné et un extrait de la ligne.
+  Finalité : détecter une intrusion sur une machine du réseau. Durée : réglée
+  par l'exploitant (trente jours par défaut).
+
+Secrets des réglages
+  - clé d'IA en nuage, jetons Telegram et docker-control, clé de la billetterie,
+    clé UniFi, jeton Cloudflare, jeton de la liste des pare-feu, scellés au repos
+    (AES-256-GCM, sous-clé par usage). Ces secrets ne ressortent jamais de l'API
+    après enregistrement.
+
+Sauvegardes
+  - l'exploitant peut tirer une copie de la base entière, chiffrée pour une clé
+    dont la partie privée ne vit pas sur la machine de VIGIE.
+  Finalité : restaurer le service après une panne ou un incident. Durée : celle
+  que l'exploitant fixe (trente jours conseillés) ; un compte effacé disparaît
+  des sauvegardes à mesure qu'elles expirent.
+
+2. CE QUI PART AILLEURS
+
+  - MapMyLAN, les services voisins (NEXARC, docker-control) : VIGIE y lit
+    l'inventaire et demande à MapMyLAN les balayages et les isolements.
+  - Le fournisseur d'IA en nuage choisi (Anthropic, OpenAI ou Moonshot),
+    seulement en mode « cloud », « les-deux » ou « secours » : les constats de
+    l'audit (noms d'appareils, adresses, ports, versions) pour relecture. En mode
+    « locale », rien ne sort du réseau.
+  - SYNAPSE (mémoire de la suite), s'il est relié : le résumé de chaque audit et
+    de chaque intervention, sans la synthèse de l'IA.
+  - La billetterie et Telegram, s'ils sont configurés : les alertes au-delà du
+    seuil choisi.
+  - La passerelle UniFi et Cloudflare, s'ils sont reliés : la liste des adresses
+    extérieures bloquées.
+  - Les éditeurs des listes de menaces : une requête de téléchargement, sans
+    aucune donnée du réseau.
+  - Le Hub, s'il installe VIGIE : l'état, les audits et les événements.
+  - Le relais SMTP de l'exploitant, s'il est configuré : les alertes de
+    sécurité des comptes, à l'adresse vérifiée.
+  Aucune mesure d'audience, aucun traceur, aucune publicité.
+
+3. COOKIES
+
+  Un cookie de session, indispensable à la connexion, et un cookie de cérémonie
+  de cinq minutes pendant une connexion par clé d'accès. Aucun autre.
+
+4. DROITS
+
+  - Accès et portabilité : page Sécurité, « Exporter mes données » (fichier JSON,
+    avec les audits lancés, les actions, les acquittements et les blocages faits
+    par le compte).
+  - Rectification : facteurs et adresse d'alerte depuis la page Sécurité ;
+    nom affiché et rôle, auprès de l'exploitant.
+  - Effacement : le compte et tout ce qui s'y rattache, depuis la page Sécurité,
+    « Supprimer mon compte » (une confirmation récente est demandée), ou par un
+    administrateur ; son identifiant est remplacé par « compte supprimé » dans
+    les audits, les actions, les événements et les blocages.
+  - Toute demande : auprès de l'exploitant de cette instance.
+
+5. SÉCURITÉ ET INCIDENTS
+
+  Les mesures techniques et la conduite à tenir en cas d'incident, y compris la
+  notification d'une violation de données dans les 72 heures, relèvent de
+  l'exploitant ; le fichier SECURITY.md du dépôt décrit les mesures en place,
+  le runbook d'incident et le canal de signalement d'une faille.
+
+VIGIE n'est pas destiné aux mineurs et ne traite aucune catégorie
+particulière de données.
