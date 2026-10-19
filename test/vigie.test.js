@@ -606,12 +606,6 @@ test('réaction rapide : jamais hors du périmètre balayé par MapMyLAN', async
   await admin.put('/api/reglages/reaction', { actif: false });
 });
 
-test('jetons inventés en rafale : chacun compte, l’adresse est bloquée avant d’en deviner un', async () => {
-  const codes = [];
-  for (let i = 0; i < 14; i++) codes.push((await avec(`faux-jeton-${i}-0000000000000000`, 'GET', '/api/etat')).status);
-  assert.ok(codes.includes(429), codes.join(' '));
-});
-
 test('adresses saisies : jamais le lien local ni les métadonnées d’un nuage, à l’enregistrement comme à l’envoi', async () => {
   for (const url of ['https://169.254.169.254/latest', 'https://[::ffff:169.254.169.254]/', 'http://0.0.0.0/']) assert.equal((await admin.put('/api/reglages/billetterie', { url })).status, 400, url);
   assert.equal((await admin.put('/api/reglages/bouclier', { listesPropres: [{ nom: 'meta', type: 'ip', url: 'https://169.254.169.254/x' }] })).status, 400);
@@ -634,4 +628,17 @@ test('actions : gardées un an, pas davantage', () => {
   vigie.db.prepare("INSERT INTO actions(id, quand, type, cible, cible_nom, auteur, motif, automatique, etat, avant, resultat) VALUES('vieille-actio', ?, 'scan', 'reseau', '', 'ana', '', 0, 'appliquee', '{}', '')").run(Date.now() - 400 * 86400e3);
   vigie.magasin.noterAction({ type: 'scan', cible: 'reseau', auteur: 'ana', etat: 'appliquee' });
   assert.equal(vigie.magasin.action('vieille-actio'), undefined);
+});
+
+test('refus : un geste au-delà du rôle ou du jeton est compté au journal de sécurité', async () => {
+  assert.equal((await membre.post('/api/actions', { type: 'quarantine', appareil: 'intrus' })).status, 403);
+  assert.equal((await hub('GET', '/api/reglages')).status, 403);
+  const causes = vigie.db.prepare("SELECT details FROM socle_journal WHERE action = 'acces.refuse'").all().map(l => JSON.parse(l.details || '{}').cause);
+  assert.ok(causes.includes('isolement') && causes.includes('jeton-reglages'), causes.join(','));
+});
+
+test('jetons inventés en rafale : chacun compte, l’adresse est bloquée avant d’en deviner un', async () => {
+  const codes = [];
+  for (let i = 0; i < 14; i++) codes.push((await avec(`faux-jeton-${i}-0000000000000000`, 'GET', '/api/etat')).status);
+  assert.ok(codes.includes(429), codes.join(' '));
 });

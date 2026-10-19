@@ -124,11 +124,13 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     throw new ErreurHttp(401, 'Jeton invalide.');
   };
   const session = (ctx, opts = {}) => portail.exiger(ctx, { role: 'lecture', ...opts });
+  // Un jeton valable ou une session qui tente au-delà de ce qu'ils ouvrent : refusé, et compté au journal comme les refus du socle.
+  const refuser = (ctx, cause, message) => portail.refuser(ctx, cause, message);
   /** qui : 'derive' (lecture et audit), 'hub' (lecture, audits, actions), sinon session seule. */
   const acces = (ctx, { role = 'lecture', jetons = [] } = {}) => {
     const a = appelant(ctx);
     if (a) {
-      if (!jetons.includes(a.type)) throw new ErreurHttp(403, a.type === 'derive' ? 'Ce jeton ne donne que la lecture et le lancement d’un audit.' : 'Réservé à une session de VIGIE.');
+      if (!jetons.includes(a.type)) refuser(ctx, `jeton-${a.type}`, a.type === 'derive' ? 'Ce jeton ne donne que la lecture et le lancement d’un audit.' : 'Réservé à une session de VIGIE.');
       return { type: a.type, nom: a.type === 'derive' ? `service:${a.nom}` : 'hub' };
     }
     const s = session(ctx, { role });
@@ -226,11 +228,11 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     const qui = acces(ctx, { role: 'membre', jetons: ['hub'] });
     const b = await corps(ctx, S.action);
     // Balayer et regarder de près : membre. Couper un appareil du réseau : admin.
-    if (!['deep-scan', 'scan'].includes(b.type) && qui.type === 'session' && qui.role !== 'admin') throw new ErreurHttp(403, 'Droits insuffisants : isoler un appareil est réservé aux administrateurs.');
+    if (!['deep-scan', 'scan'].includes(b.type) && qui.type === 'session' && qui.role !== 'admin') refuser(ctx, 'isolement', 'Droits insuffisants : isoler un appareil est réservé aux administrateurs.');
     if (b.type !== 'scan' && !b.appareil) throw new ErreurHttp(400, 'Champ « appareil » : obligatoire.');
     // Forcer l'isolation d'un équipement d'infrastructure : une session d'administrateur, sous renfort ; jamais un jeton.
     if (b.forcer) {
-      if (qui.type !== 'session') throw new ErreurHttp(403, 'Forcer une isolation est réservé à une session d’administrateur de VIGIE.');
+      if (qui.type !== 'session') refuser(ctx, 'forcer', 'Forcer une isolation est réservé à une session d’administrateur de VIGIE.');
       portail.exiger(ctx, { role: 'admin', renfort: true });
     }
     const x = await moteur.executer({ type: b.type, appareil: b.appareil, motif: b.motif || '', auteur: qui.nom, forcer: !!b.forcer }).catch(actionErreur);
@@ -262,7 +264,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     bouclier: { ...magasin.reglagePublic('bouclier'), sondes: (magasin.reglage('bouclier').sondes || []).map(({ nom, cree }) => ({ nom, cree })), listeBlancheDefaut: LISTE_BLANCHE_DEFAUT },
     sentinelle: magasin.reglage('sentinelle'),
   });
-  const admin = (ctx, renfort = false) => { if (appelant(ctx)) throw new ErreurHttp(403, 'Réservé à une session de VIGIE.'); return portail.exiger(ctx, { role: 'admin', renfort }); };
+  const admin = (ctx, renfort = false) => { if (appelant(ctx)) refuser(ctx, 'jeton-reglages', 'Réservé à une session de VIGIE.'); return portail.exiger(ctx, { role: 'admin', renfort }); };
 
   r.get('/api/reglages', ctx => { admin(ctx); return reglages(); });
 
