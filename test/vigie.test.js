@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 import { Client } from '../socle/essai/client.js';
 import { adminComplet, membreInvite } from '../socle/essai/inscription.js';
 import { demarrer } from '../src/main.js';
@@ -248,6 +249,27 @@ test('autorisations : anonyme, lecture, membre, Hub, jeton dérivé', async () =
   assert.equal((await avec('cer_mapmylan_' + '0'.repeat(64), 'GET', '/api/etat')).status, 401);
   assert.equal((await avec('faux-jeton', 'GET', '/api/etat')).status, 401);
   assert.equal((await anonyme.get('/api/etat?x=1')).status, 400);
+});
+
+test('en-têtes de sécurité, nonce, sonde publique minimale, security.txt, droits des fichiers', async () => {
+  const r = await new Promise(recu => http.get({ host: '127.0.0.1', port, path: '/', agent: false, headers: { host: `localhost:${port}` } }, recu));
+  let page = ''; for await (const m of r) page += m;
+  const csp = r.headers['content-security-policy'];
+  const nonce = /'nonce-([^']+)'/.exec(csp)[1];
+  assert.match(page, new RegExp(`nonce="${nonce.replace(/[+/]/g, '\\$&')}"`));
+  assert.doesNotMatch(csp, /script-src[^;]*unsafe-(inline|eval)/);
+  assert.match(csp, /frame-ancestors 'none'/);
+  assert.match(csp, /object-src 'none'/);
+  for (const h of ['x-content-type-options', 'referrer-policy', 'permissions-policy', 'cross-origin-opener-policy']) assert.ok(r.headers[h], h);
+  assert.equal(r.headers['x-powered-by'], undefined);
+  const donnees = path.join(tmp, 'data');
+  for (const f of ['vigie.db', 'vigie.db-wal']) assert.equal(fs.statSync(path.join(donnees, f)).mode & 0o777, 0o600, f);
+  assert.equal(fs.statSync(donnees).mode & 0o077, 0, 'dossier des données fermé aux autres');
+  assert.deepEqual((await new Client(port).get('/api/health')).json, { ok: true });
+  const st = await new Client(port).get('/.well-known/security.txt');
+  assert.match(st.texte, /Contact: https:\/\/github\.com\/CodexX64\/vigie\/security\/advisories\/new/);
+  assert.match(st.texte, /Expires: /);
+  assert.equal((await new Client(port).get('/.env')).status, 404);
 });
 
 // Chaque route, son rôle de session et les jetons qui l'ouvrent. Une route
