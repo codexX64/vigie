@@ -403,6 +403,13 @@ test('récepteur : UDP et TCP (lignes et cadrage par longueur), émetteurs filtr
     assert.equal(lues.length, 5);
     u.close();
   } finally { rc.arreter(); }
+  // Un émetteur non déclaré qui inonde ne fait pas déborder la passerelle déclarée.
+  const vues = [];
+  const r2 = new Recepteur({ emetteurs: () => ['10.9.1.1'], surObservation: o => vues.push(o), log: silence, maintenant: () => 1000 });
+  const l2 = `<4>Oct 13 10:00:01 udm kernel: [WAN_IN-D-1] SRC=${ATTAQUANT} DST=203.0.113.5 PROTO=TCP SPT=1 DPT=22`;
+  for (let i = 0; i < 5000; i++) r2.ligne(l2, '10.9.1.66');
+  r2.ligne(l2, '10.9.1.1');
+  assert.deepEqual([vues.length, r2.stats.refusees, r2.stats.debordees], [1, 5000, 0]);
 });
 
 // ---------- la passerelle par MapMyLAN ----------

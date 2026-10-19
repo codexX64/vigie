@@ -31,10 +31,11 @@ export class Recepteur {
   ligne(texte, emetteur) {
     this.stats.recues++;
     const t = this.maintenant();
+    // Le dernier émetteur refusé est montré : derrière un relais de Docker, la passerelle peut arriver sous une autre adresse.
+    // Refusé avant d'être compté : un émetteur non déclaré qui inonde ne prend pas la place des lignes de la passerelle.
+    if (!this.autorise(emetteur)) { this.stats.refusees++; this.stats.dernierRefus = emetteur; return; }
     if (t - this.fenetre.t >= 1000) this.fenetre = { t, n: 0 };
     if (++this.fenetre.n > PAR_SECONDE) { this.stats.debordees++; return; }
-    // Le dernier émetteur refusé est montré : derrière un relais de Docker, la passerelle peut arriver sous une autre adresse.
-    if (!this.autorise(emetteur)) { this.stats.refusees++; this.stats.dernierRefus = emetteur; return; }
     const o = lireLigne(texte.slice(0, LIGNE_MAX), `syslog:${emetteur}`, t);
     this.stats.parEmetteur[emetteur] = t;
     if (!o) {
