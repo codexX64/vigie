@@ -58,8 +58,30 @@ donne à VIGIE, pour chaque source, un jeton dérivé qui ne vaut que pour elle
 (voir [docs/INTEGRATION.md](docs/INTEGRATION.md)). Le jeton de docker-control
 se pose dans VIGIE → Réglages.
 
-Seule, sans le Hub : `docker compose up -d --build` avec un `.env` (voir
-`docker-compose.yml`).
+### Installation seule
+
+La clé maîtresse vit dans un secret Docker, hors du volume de données, lisible
+par l'utilisateur du conteneur (10004) seul. Garder une copie hors ligne de
+`secrets/socle_cle` : sans elle, une sauvegarde de la base ne rouvre ni les
+secrets TOTP ni ceux des réglages.
+
+```bash
+# .env : VIGIE_HUB_TOKEN (openssl rand -hex 24), MAPMYLAN_URL, MAPMYLAN_JETON (docs/INTEGRATION.md)
+mkdir -p secrets && openssl rand -base64 32 > secrets/socle_cle && : > secrets/socle_cle_ancienne
+sudo chown 10004:10004 secrets/socle_cle secrets/socle_cle_ancienne && sudo chmod 400 secrets/socle_cle secrets/socle_cle_ancienne
+docker compose up -d --build
+docker compose logs vigie | grep "Jeton d'installation"
+```
+
+Sans `SOCLE_CLE` ni `SOCLE_CLE_FILE`, la clé est créée dans `DATA_DIR/cles`,
+ce qui ne convient qu'au développement.
+
+**Tourner la clé maîtresse.** La clé actuelle dans `SOCLE_CLE_ANCIENNE` (le
+Hub, ou `secrets/socle_cle_ancienne`), une neuve (`openssl rand -base64 32`)
+dans `SOCLE_CLE`, puis redémarrer : VIGIE rescelle chaque secret TOTP et chaque
+secret de ses réglages, et l'écrit dans ses journaux. Vider ensuite
+l'ancienne et redémarrer. Une clé que la base ne connaît pas arrête le
+démarrage au lieu de perdre les secrets.
 
 ### Sauvegardes
 

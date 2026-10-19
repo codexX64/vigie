@@ -15,6 +15,11 @@ services:
     ports: ["127.0.0.1:8170:8170", "5514:5514/udp", "5514:5514/tcp"]
     environment:
       VIGIE_SYSLOG_PORT_HOTE: "5514"
+      # La clé maîtresse vient d'un fichier hors du volume de données : une copie
+      # du volume ne suffit pas à ouvrir ce qu'elle scelle (README, « Installation seule »).
+      SOCLE_CLE_FILE: /run/secrets/socle_cle
+      SOCLE_CLE_ANCIENNE_FILE: /run/secrets/socle_cle_ancienne
+    secrets: [socle_cle, socle_cle_ancienne]
     volumes: [vigie-data:/data]
     env_file: [.env]
     read_only: true
@@ -24,6 +29,18 @@ services:
     mem_limit: 384m
     cpus: 1.0
     pids_limit: 128
+    # Journaux du conteneur, où part aussi le journal de sécurité : gardés par
+    # le démon Docker, hors de portée du service, cinq fichiers de 10 Mo.
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+secrets:
+  socle_cle:
+    file: ./secrets/socle_cle
+  # Vide, sauf pendant une rotation (README, « Tourner la clé maîtresse »).
+  socle_cle_ancienne:
+    file: ./secrets/socle_cle_ancienne
 
 volumes:
   vigie-data:
