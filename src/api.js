@@ -286,7 +286,8 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     try { return await ia.essai(b.cible); } catch (e) { throw new ErreurHttp(502, `IA ${b.cible === 'locale' ? 'locale' : 'en nuage'} : ${e.message}.`); }
   });
   r.put('/api/reglages/veille', async ctx => {
-    const s = admin(ctx);
+    // Couper ou espacer la veille aveugle VIGIE : renfort, comme pour le bouclier.
+    const s = admin(ctx, true);
     const b = await corps(ctx, S.veille);
     magasin.poserReglage('veille', b);
     journal.ecrire({ acteur: s.compte, action: 'reglages.veille', objet: 'veille', ip: ctx.ip, details: b });
@@ -331,7 +332,9 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
   r.put('/api/reglages/telegram', async ctx => {
     const s = admin(ctx);
     const b = await corps(ctx, S.telegram);
-    if (b.jeton || b.retirerJeton) portail.exiger(ctx, { role: 'admin', renfort: true });
+    // Changer de conversation enverrait les alertes ailleurs avec le bot enregistré : renfort, comme pour le jeton.
+    const changeChat = b.chat !== undefined && b.chat !== magasin.reglage('telegram').chat && magasin.secret('telegram', 'jeton');
+    if (b.jeton || b.retirerJeton || changeChat) portail.exiger(ctx, { role: 'admin', renfort: true });
     const { jeton, retirerJeton, ...reste } = b;
     if (jeton) magasin.poserSecret('telegram', 'jeton', jeton);
     if (retirerJeton) magasin.poserSecret('telegram', 'jeton', null);
@@ -500,7 +503,8 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
   r.get('/api/sentinelle/alertes', ctx => { acces(ctx, LECTURE); const q = ctx.q; return sentinelle.alertes({ limite: q.limite || 100, depuis: q.depuis || 0, niveau: q.niveau || 0, hote: q.hote || '', regle: q.regle || '', srcip: q.srcip || '' }); }, { requete: Q.sentinelle });
   r.get('/api/sentinelle/regles', ctx => { acces(ctx, LECTURE); return sentinelle.regles(); });
   r.put('/api/reglages/sentinelle', async ctx => {
-    const s = admin(ctx);
+    // Éteindre la sentinelle ou relever ses seuils la rend sourde : renfort.
+    const s = admin(ctx, true);
     const b = await corps(ctx, S.sentinelle);
     magasin.poserReglage('sentinelle', b);
     sentinelle.rafraichir();

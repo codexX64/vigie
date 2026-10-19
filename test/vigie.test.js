@@ -303,6 +303,28 @@ test('veille : nouvel appareil, nouveau port, intrusion — sans réaction tant 
   assert.equal(t.json[0].id, intrusion.id);
 });
 
+// Le renfort de l'administrateur retiré le temps d'un essai, puis rendu.
+async function sansRenfort(fn) {
+  const q = "SELECT id, renfort FROM socle_sessions WHERE compte = (SELECT id FROM socle_comptes WHERE identifiant = 'ana')";
+  const avant = vigie.db.prepare(q).all();
+  vigie.db.prepare("UPDATE socle_sessions SET renfort = 0 WHERE compte = (SELECT id FROM socle_comptes WHERE identifiant = 'ana')").run();
+  try { return await fn(); } finally { for (const x of avant) vigie.db.prepare('UPDATE socle_sessions SET renfort = ? WHERE id = ?').run(x.renfort, x.id); }
+}
+
+test('renfort : ce qui rend VIGIE sourde ou envoie ses alertes ailleurs le demande', async () => {
+  await admin.put('/api/reglages/telegram', { jeton: JETON_TG, chat: '-100123', seuil: 'eleve' });
+  await sansRenfort(async () => {
+    assert.equal((await admin.put('/api/reglages/telegram', { chat: '-100999' })).status, 403, 'autre conversation');
+    assert.equal((await admin.put('/api/reglages/telegram', { seuil: 'critique' })).status, 200, 'le seuil seul, sans renfort');
+    assert.equal((await admin.put('/api/reglages/veille', { actif: false })).status, 403);
+    assert.equal((await admin.put('/api/reglages/sentinelle', { actif: false })).status, 403);
+    assert.equal((await admin.put('/api/reglages/reaction', { actif: true })).status, 403);
+  });
+  assert.equal(vigie.magasin.reglage('telegram').chat, '-100123');
+  assert.equal(vigie.magasin.reglage('veille').actif, true);
+  assert.equal((await admin.put('/api/reglages/telegram', { seuil: 'eleve' })).status, 200);
+});
+
 test('réaction rapide : renfort pour l’allumer, isolement vérifié, plafond, jamais l’infrastructure', async () => {
   const r = await admin.put('/api/reglages/reaction', { actif: true, parHeure: 1 });
   assert.equal(r.status, 200, JSON.stringify(r.json));
