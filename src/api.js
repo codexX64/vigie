@@ -21,6 +21,7 @@ import { MODES, LISTE_BLANCHE_DEFAUT } from './bouclier/riposte.js';
 import { observer, empreinteValide, empreinte } from './bouclier/tls.js';
 import { plage, normaliser } from './bouclier/ip.js';
 import { empreinteJeton } from './bouclier/index.js';
+import { litteraleInterdite } from './destination.js';
 
 const T = (max, o = {}) => ({ type: 'chaine', max, ...o });
 const B = { type: 'booleen' };
@@ -94,6 +95,7 @@ export function urlBilletterieSure(brute) {
   let u;
   try { u = new URL(brute); } catch { return false; }
   if (u.username || u.password) return false;
+  if (litteraleInterdite(brute)) return false;
   if (u.protocol === 'https:') return true;
   if (u.protocol !== 'http:') return false;
   const hote = u.hostname;
@@ -361,6 +363,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     const b = await corps(ctx, S.bouclier);
     for (const x of [...(b.listeBlanche || []), ...(b.emetteurs || [])]) if (!plage(x)) throw new ErreurHttp(400, `Adresse ou plage invalide : ${x}.`);
     if (b.listes) for (const [k, v] of Object.entries(b.listes)) if (!/^[a-z0-9-]{2,40}$/.test(k) || typeof v !== 'boolean') throw new ErreurHttp(400, 'Champ « listes » : identifiant et vrai/faux attendus.');
+    for (const l of b.listesPropres || []) if (litteraleInterdite(l.url) || /@/.test(new URL(l.url).host)) throw new ErreurHttp(400, `Liste « ${l.nom} » : adresse refusée (lien local, métadonnées, réservée ou identifiants dans l’adresse).`);
     magasin.poserReglage('bouclier', b);
     bouclier.rafraichir();
     journal.ecrire({ acteur: s.compte, action: 'reglages.bouclier', objet: 'bouclier', ip: ctx.ip, details: { ...b } });

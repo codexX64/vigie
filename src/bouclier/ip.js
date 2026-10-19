@@ -97,6 +97,22 @@ for (const p of [...RFC1918, '0.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.2
 NON_PUBLIQUES.figer();
 export const estPublique = ip => !!versEntier(ip) && !NON_PUBLIQUES.contient(ip);
 
+// Ce vers quoi VIGIE n'envoie jamais rien quand une adresse est saisie par
+// quelqu'un (billetterie, liste de menaces ajoutée) : « ceci » (0.0.0.0), lien
+// local (où répondent les métadonnées d'un nuage), multicast, réservé. Le
+// réseau local et la machine elle-même restent permis : la billetterie y vit.
+const INTERDITES = new EnsembleIp();
+for (const p of ['0.0.0.0/8', '169.254.0.0/16', '224.0.0.0/4', '240.0.0.0/4', '::/128', 'fe80::/10', 'ff00::/8', 'fd00:ec2::/32']) INTERDITES.ajouter(p);
+INTERDITES.figer();
+export const estInterdite = ip => {
+  const s = String(ip || '').trim().replace(/^\[|\]$/g, '');
+  const e = versEntier(s);
+  if (!e) return false;
+  // Une IPv4 déguisée en IPv6 (::ffff:a9fe:a9fe) est jugée comme l'IPv4 qu'elle porte.
+  if (e.v === 6 && e.n >> 32n === 0xffffn) return INTERDITES.contient([24n, 16n, 8n, 0n].map(d => Number((e.n >> d) & 255n)).join('.'));
+  return INTERDITES.contient(s);
+};
+
 // Les plages privées seules : « interne » au sens du réseau surveillé.
 const PRIVEES = new EnsembleIp();
 for (const p of [...RFC1918, '100.64.0.0/10', 'fc00::/7', 'fe80::/10']) PRIVEES.ajouter(p);

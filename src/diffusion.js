@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import { RANG } from './base.js';
 import { jsonBorne } from './lecture.js';
+import { verifierDestination } from './destination.js';
 
 const S = (v, max = 512) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/[\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, '').trim().slice(0, max);
 const echappe = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -26,8 +27,8 @@ export function ticketDe(e, { marqueur = 'ticket', lien = '' } = {}) {
 }
 
 export class Diffusion {
-  constructor({ magasin, fetch: f = globalThis.fetch, tgApi = 'https://api.telegram.org', urlPublique = '' }) {
-    Object.assign(this, { magasin, fetch: f, tgApi, urlPublique });
+  constructor({ magasin, fetch: f = globalThis.fetch, tgApi = 'https://api.telegram.org', urlPublique = '', resoudre }) {
+    Object.assign(this, { magasin, fetch: f, tgApi, urlPublique, resoudre });
     this.etat = { billetterie: null, telegram: null };
   }
 
@@ -50,6 +51,8 @@ export class Diffusion {
     const nom = /^[A-Za-z0-9-]{1,40}$/.test(r.entete) ? r.entete : 'X-Ticket-Key';
     const t = ticketDe(e, { marqueur: r.marqueur, lien: this.urlPublique ? `${this.urlPublique}/#evenements` : '' });
     try {
+      // Le nom est relu à chaque envoi : il ne mène ni au lien local ni aux métadonnées d'un nuage.
+      await verifierDestination(r.url, this.resoudre ? { resoudre: this.resoudre } : {});
       const rep = await this.poster(r.url, { [nom]: cle, 'idempotency-key': crypto.createHash('sha256').update(`${t.dedup_key}|${t.detecte_le.slice(0, 13)}`).digest('hex').slice(0, 32) }, t);
       const out = rep.status === 401 ? { ok: false, erreur: 'Clé refusée par la billetterie.' } : rep.ok ? { ok: true } : { ok: false, erreur: `La billetterie a répondu ${rep.status}.` };
       this.etat.billetterie = { ...out, quand: Date.now() };

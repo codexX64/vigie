@@ -611,3 +611,21 @@ test('jetons inventés en rafale : chacun compte, l’adresse est bloquée avant
   for (let i = 0; i < 14; i++) codes.push((await avec(`faux-jeton-${i}-0000000000000000`, 'GET', '/api/etat')).status);
   assert.ok(codes.includes(429), codes.join(' '));
 });
+
+test('adresses saisies : jamais le lien local ni les métadonnées d’un nuage, à l’enregistrement comme à l’envoi', async () => {
+  for (const url of ['https://169.254.169.254/latest', 'https://[::ffff:169.254.169.254]/', 'http://0.0.0.0/']) assert.equal((await admin.put('/api/reglages/billetterie', { url })).status, 400, url);
+  assert.equal((await admin.put('/api/reglages/bouclier', { listesPropres: [{ nom: 'meta', type: 'ip', url: 'https://169.254.169.254/x' }] })).status, 400);
+  // Un nom qui mène aux métadonnées : refusé au moment d'envoyer, rien ne part.
+  const { Diffusion } = await import('../src/diffusion.js');
+  const appels = [];
+  const magasin = { reglage: () => ({ url: 'https://billets.exemple/api', seuil: 'info', entete: 'X-Ticket-Key', marqueur: 'ticket' }), secret: () => 'cle-0123456789' };
+  const d = new Diffusion({ magasin, fetch: async (...a) => { appels.push(a); return new Response('{}'); }, resoudre: async () => [{ address: '169.254.169.254' }] });
+  const r = await d.billetterie({ id: 'e', quand: 0, gravite: 'critique', type: 'essai', titre: 't', texte: '', sujet: '', cle: 'k' });
+  assert.equal(r.ok, false); assert.match(r.erreur, /métadonnées/); assert.equal(appels.length, 0);
+  const { Menaces } = await import('../src/bouclier/menaces.js');
+  const m = new Menaces({ dossier: path.join(tmp, 'menaces-meta'), magasin: { reglage: () => ({ listesHeures: 6, listesPropres: [{ nom: 'x', type: 'ip', url: 'https://listes.exemple/x', poids: 50 }], listes: Object.fromEntries(['spamhaus-drop', 'feodo', 'et-compromis', 'cins-army', 'blocklist-de', 'urlhaus', 'threatfox'].map(k => [k, false])) }), memoire: (_, d) => d, poserMemoire() {} },
+    fetch: async (...a) => { appels.push(a); return new Response('1.2.3.4\n'); }, resoudre: async () => [{ address: '169.254.169.254' }], log: silence });
+  await m.actualiser();
+  assert.equal(appels.length, 0);
+  assert.match(m.public().find(x => x.id === 'propre-1').erreur, /métadonnées/);
+});

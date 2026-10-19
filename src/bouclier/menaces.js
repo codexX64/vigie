@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { EnsembleIp, estPublique } from './ip.js';
 import { lireBorne } from '../lecture.js';
+import { verifierDestination } from '../destination.js';
 
 // id → définition. « poids » : ce qu'une présence sur la liste ajoute au score
 // d'une adresse vue (100 = blocage immédiat).
@@ -51,8 +52,8 @@ export function lire(def, texte) {
 }
 
 export class Menaces {
-  constructor({ dossier, magasin, fetch: f = globalThis.fetch, maintenant = () => Date.now(), log = console }) {
-    Object.assign(this, { dossier: path.join(dossier, 'menaces'), magasin, fetch: f, maintenant, log });
+  constructor({ dossier, magasin, fetch: f = globalThis.fetch, maintenant = () => Date.now(), log = console, resoudre }) {
+    Object.assign(this, { dossier: path.join(dossier, 'menaces'), magasin, fetch: f, maintenant, log, resoudre });
     fs.mkdirSync(this.dossier, { recursive: true, mode: 0o700 });
     this.ip = new Map();        // id → EnsembleIp
     this.dom = new Map();       // id → Set
@@ -90,7 +91,9 @@ export class Menaces {
       const e = this.etat[id] || {};
       if (!forcer && e.maj && this.maintenant() - e.maj < heures * 3600e3 && (this.ip.has(id) || this.dom.has(id))) continue;
       try {
-        const reponse = await this.fetch(def.url, { signal: AbortSignal.timeout(60_000), headers: { 'User-Agent': 'VIGIE (defensive network monitor)' } });
+        // Une liste ajoutée par un administrateur : son adresse relue à chaque téléchargement, sans redirection.
+        if (def.propre) await verifierDestination(def.url, this.resoudre ? { resoudre: this.resoudre } : {});
+        const reponse = await this.fetch(def.url, { signal: AbortSignal.timeout(60_000), redirect: def.propre ? 'error' : 'follow', headers: { 'User-Agent': 'VIGIE (defensive network monitor)' } });
         if (!reponse.ok) throw new Error(`HTTP ${reponse.status}`);
         // Lue morceau par morceau, abandonnée au-delà de la taille permise : jamais entière en mémoire d'abord.
         const texte = (await lireBorne(reponse, TAILLE_MAX)).toString('utf8');
