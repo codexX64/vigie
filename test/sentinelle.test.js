@@ -224,7 +224,7 @@ test('API : des journaux d’hôte en syslog deviennent alertes, événement, po
 
   for (let i = 0; i < 9; i++) await envoyer(`<38>Oct 15 10:00:0${i} srv1 sshd[1]: Failed password for root from ${ATTAQUANT} port ${50000 + i} ssh2`);
   await envoyer(`<38>Oct 15 10:00:20 srv1 sshd[1]: Accepted password for root from ${ATTAQUANT} port 2 ssh2`);
-  await envoyer('<4>Oct 15 10:01:01 udm kernel: [WAN_IN-D-1] SRC=203.0.113.77 DST=203.0.113.5 PROTO=TCP SPT=1 DPT=22');
+  await envoyer('<4>Oct 15 10:01:01 passerelle kernel: [WAN_IN-D-1] SRC=203.0.113.77 DST=203.0.113.5 PROTO=TCP SPT=1 DPT=22');
   for (let i = 0; i < 100 && vigie.bouclier.recepteur.stats.hotes < 20; i++) await attendre(10);
   // Le même hôte, vu depuis une adresse du réseau (le banc envoie en boucle locale, qui n'est pas « interne »).
   assert.equal(vigie.sentinelle.ligne('<86>Oct 15 10:01:00 srv1 useradd[9]: new user: name=svc, UID=1004, GID=1004, home=/home/svc, shell=/bin/bash', '10.9.1.3', Date.now()), true);

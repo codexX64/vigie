@@ -51,14 +51,14 @@ await vigie.moteur.executer({ type: 'quarantine', appareil: 'intrus', motif: 'Si
 // Le bouclier : journaux d'une passerelle UniFi de démonstration, une passerelle qui répond.
 const b = vigie.bouclier;
 await b.menaces.actualiser({ forcer: true });
-const udm = l => { const o = lireLigne(l, 'syslog:192.0.2.1'); if (o) { b.recepteur.stats.recues++; b.recepteur.stats.lues++; b.recepteur.stats.derniere = Date.now(); b.recepteur.stats.parEmetteur['192.0.2.1'] = Date.now(); b.correlateur.observer(o); } };
+const passerelle = l => { const o = lireLigne(l, 'syslog:192.0.2.1'); if (o) { b.recepteur.stats.recues++; b.recepteur.stats.lues++; b.recepteur.stats.derniere = Date.now(); b.recepteur.stats.parEmetteur['192.0.2.1'] = Date.now(); b.correlateur.observer(o); } };
 const cef = (nom, ext) => `<132>Oct 13 10:00:00 passerelle CEF:0|Ubiquiti|UniFi Network|9.4.19|544|${nom}|7|${ext}`;
-udm(cef('Threat Detected and Blocked', 'src=45.155.205.10 spt=51111 dst=10.9.10.20 dpt=22 proto=TCP UNIFIcategory=Security UNIFIsubCategory=Intrusion Prevention UNIFIipsSignature=ET SCAN Potential SSH Scan OUTBOUND UNIFIipsSignatureId=2003068 UNIFIrisk=high'));
-udm(cef('Threat Detected and Blocked', 'src=193.32.162.8 spt=40111 dst=10.9.10.30 dpt=445 proto=TCP UNIFIcategory=Security UNIFIipsSignature=ET EXPLOIT Possible ETERNALBLUE Probe MS17-010 UNIFIipsSignatureId=2024218 UNIFIrisk=medium'));
-udm(cef('Threat Detected', 'src=193.32.162.8 spt=40112 dst=10.9.10.30 dpt=3389 proto=TCP UNIFIcategory=Security UNIFIipsSignature=ET SCAN MS Terminal Server Traffic on Non-standard Port UNIFIipsSignatureId=2023753 UNIFIrisk=low'));
-udm(cef('Honeypot Triggered', 'UNIFIcategory=Security UNIFIsubCategory=Honeypot src=10.9.10.77 dst=10.9.10.2 dpt=23 msg=Honeypot accessed'));
-for (let p = 1000; p < 1016; p++) udm(`<4>Oct 13 10:00:01 passerelle kernel: [WAN_IN-D-2147483647] IN=eth8 OUT= SRC=141.98.11.4 DST=203.0.113.5 LEN=60 PROTO=TCP SPT=40000 DPT=${p} SYN`);
-for (let i = 0; i < 6; i++) udm(`<4>Oct 13 10:00:02 passerelle kernel: [WAN_IN-D-2147483647] IN=eth8 OUT= SRC=80.94.95.12 DST=203.0.113.5 LEN=60 PROTO=TCP SPT=40000 DPT=22 SYN`);
+passerelle(cef('Threat Detected and Blocked', 'src=45.155.205.10 spt=51111 dst=10.9.10.20 dpt=22 proto=TCP UNIFIcategory=Security UNIFIsubCategory=Intrusion Prevention UNIFIipsSignature=ET SCAN Potential SSH Scan OUTBOUND UNIFIipsSignatureId=2003068 UNIFIrisk=high'));
+passerelle(cef('Threat Detected and Blocked', 'src=193.32.162.8 spt=40111 dst=10.9.10.30 dpt=445 proto=TCP UNIFIcategory=Security UNIFIipsSignature=ET EXPLOIT Possible ETERNALBLUE Probe MS17-010 UNIFIipsSignatureId=2024218 UNIFIrisk=medium'));
+passerelle(cef('Threat Detected', 'src=193.32.162.8 spt=40112 dst=10.9.10.30 dpt=3389 proto=TCP UNIFIcategory=Security UNIFIipsSignature=ET SCAN MS Terminal Server Traffic on Non-standard Port UNIFIipsSignatureId=2023753 UNIFIrisk=low'));
+passerelle(cef('Honeypot Triggered', 'UNIFIcategory=Security UNIFIsubCategory=Honeypot src=10.9.10.77 dst=10.9.10.2 dpt=23 msg=Honeypot accessed'));
+for (let p = 1000; p < 1016; p++) passerelle(`<4>Oct 13 10:00:01 passerelle kernel: [WAN_IN-D-2147483647] IN=eth8 OUT= SRC=141.98.11.4 DST=203.0.113.5 LEN=60 PROTO=TCP SPT=40000 DPT=${p} SYN`);
+for (let i = 0; i < 6; i++) passerelle(`<4>Oct 13 10:00:02 passerelle kernel: [WAN_IN-D-2147483647] IN=eth8 OUT= SRC=80.94.95.12 DST=203.0.113.5 LEN=60 PROTO=TCP SPT=40000 DPT=22 SYN`);
 b.correlateur.observer({ type: 'flux', src: '10.9.10.50', dst: '185.220.101.7', dport: 443, capteur: 'syslog:192.0.2.1' });
 await new Promise(r => setTimeout(r, 50));
 await b.riposte.bloquer({ ip: '2a01:4f8:c0c:1234::7', minutes: 1440, motif: 'balayage IPv6 vu dans les journaux du NAS', raisons: ['balayage IPv6 vu dans les journaux du NAS'], auteur: 'ana' });

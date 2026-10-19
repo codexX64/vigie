@@ -61,26 +61,26 @@ test('adresses : forme unique, plages, ensembles fusionnés, public et interne',
 
 // ---------- journaux ----------
 test('journaux : syslog 3164 et 5424, CEF d’UniFi, pare-feu, EVE de Suricata', () => {
-  assert.equal(messageSyslog('<134>Oct 13 10:00:00 udm kernel: [WAN_IN-D-2000] IN=eth8 SRC=1.2.3.4'), 'kernel: [WAN_IN-D-2000] IN=eth8 SRC=1.2.3.4');
-  assert.equal(messageSyslog('<14>1 2026-10-13T10:00:00Z udm app - - - bonjour'), 'bonjour');
-  assert.equal(messageSyslog('<14>1 2026-10-13T10:00:00Z udm app - - [x a="1"] bonjour'), 'bonjour');
+  assert.equal(messageSyslog('<134>Oct 13 10:00:00 passerelle kernel: [WAN_IN-D-2000] IN=eth8 SRC=1.2.3.4'), 'kernel: [WAN_IN-D-2000] IN=eth8 SRC=1.2.3.4');
+  assert.equal(messageSyslog('<14>1 2026-10-13T10:00:00Z passerelle app - - - bonjour'), 'bonjour');
+  assert.equal(messageSyslog('<14>1 2026-10-13T10:00:00Z passerelle app - - [x a="1"] bonjour'), 'bonjour');
 
   const cef = `<132>Oct 13 10:00:00 passerelle CEF:0|Ubiquiti|UniFi Network|9.4.19|544|Threat Detected and Blocked|7|src=${ATTAQUANT} spt=51111 dst=10.9.1.20 dpt=22 proto=TCP UNIFIcategory=Attempted Administrator Privilege Gain UNIFIipsSignature=ET SCAN Potential SSH Scan UNIFIipsSignatureId=2001219 UNIFIrisk=high msg=a\\=b`;
   const c = lireCef(messageSyslog(cef));
   assert.equal(c.entete.nom, 'Threat Detected and Blocked');
   assert.equal(c.ext.UNIFIipsSignature, 'ET SCAN Potential SSH Scan');
   assert.equal(c.ext.msg, 'a=b');
-  const o = lireLigne(cef, 'syslog:udm', 1);
+  const o = lireLigne(cef, 'syslog:passerelle', 1);
   assert.deepEqual([o.type, o.src, o.dst, o.dport, o.gravite, o.sid, o.action, o.proto], ['ips', ATTAQUANT, '10.9.1.20', 22, 1, 2001219, 'bloque', 'tcp']);
   assert.equal(lireCef('CEF:0|a|b|'), null, 'en-tête incomplet');
   const pot = lireLigne('<132>Oct 13 10:00:00 passerelle CEF:0|Ubiquiti|UniFi Network|9.4.19|600|Honeypot Triggered|5|UNIFIcategory=Security UNIFIsubCategory=Honeypot src=10.9.30.40 dst=10.9.30.2 dpt=23 msg=Honeypot accessed');
   assert.deepEqual([pot.type, pot.gravite, pot.categorie, pot.src], ['ips', 1, 'honeypot', '10.9.30.40'], 'pot de miel : alerte de gravité 1');
   assert.equal(lireLigne('<132>Oct 13 10:00:00 passerelle CEF:0|Ubiquiti|UniFi Network|9.4.19|101|Admin Accessed UniFi Network|1|UNIFIcategory=System src=10.9.1.10 msg=x').type, 'autre');
 
-  const pf = lireLigne(`<4>Oct 13 10:00:01 udm kernel: [WAN_IN-D-2147483647] IN=eth8 OUT= MAC=aa SRC=${ATTAQUANT} DST=203.0.113.5 LEN=60 PROTO=TCP SPT=40000 DPT=3389 SYN`);
+  const pf = lireLigne(`<4>Oct 13 10:00:01 passerelle kernel: [WAN_IN-D-2147483647] IN=eth8 OUT= MAC=aa SRC=${ATTAQUANT} DST=203.0.113.5 LEN=60 PROTO=TCP SPT=40000 DPT=3389 SYN`);
   assert.deepEqual([pf.type, pf.action, pf.src, pf.dport, pf.regle, pf.entree], ['pare-feu', 'bloque', ATTAQUANT, 3389, 'WAN_IN-D-2147483647', 'eth8']);
-  assert.equal(lireLigne('<4>Oct 13 10:00:01 udm kernel: [LAN_IN-A-1] SRC=10.9.1.2 DST=10.9.1.3 PROTO=UDP SPT=1 DPT=53').action, 'accepte');
-  assert.equal(lireLigne('<4>Oct 13 10:00:01 udm dnsmasq: query A exemple.fr'), null, 'une ligne qui ne dit rien');
+  assert.equal(lireLigne('<4>Oct 13 10:00:01 passerelle kernel: [LAN_IN-A-1] SRC=10.9.1.2 DST=10.9.1.3 PROTO=UDP SPT=1 DPT=53').action, 'accepte');
+  assert.equal(lireLigne('<4>Oct 13 10:00:01 passerelle dnsmasq: query A exemple.fr'), null, 'une ligne qui ne dit rien');
 
   const t = '2026-10-13T10:00:00.000000+0000';
   const a = depuisEve({ timestamp: t, event_type: 'alert', src_ip: ATTAQUANT, src_port: 4444, dest_ip: '10.9.1.9', dest_port: 445, proto: 'TCP', alert: { action: 'allowed', severity: 2, signature: 'ET EXPLOIT SMB', signature_id: 2024218, category: 'Attempted Administrator Privilege Gain' } }, 'sonde:sonde-1');
@@ -176,7 +176,7 @@ test('corrélation : gravité 1 bloque, 2 et 3 s’additionnent puis s’effacen
 
 test('corrélation : balayages, force brute, listes, serveur de commande, machine interne compromise, DGA', () => {
   const { c, verdicts } = correlateur({}, { [C2]: [{ id: 'feodo', nom: 'Feodo', poids: 100, sujet: 'botnet' }] });
-  const pf = (src, dst, dport) => c.observer({ type: 'pare-feu', src, dst, dport, action: 'bloque', capteur: 'udm' });
+  const pf = (src, dst, dport) => c.observer({ type: 'pare-feu', src, dst, dport, action: 'bloque', capteur: 'passerelle' });
   // Balayage vertical : 15 ports d'une cible (60) + 15 refus (2 chacun).
   const scan = '80.81.82.83';
   for (let p = 1000; p < 1015; p++) pf(scan, '203.0.113.5', p);
@@ -406,7 +406,7 @@ test('récepteur : UDP et TCP (lignes et cadrage par longueur), émetteurs filtr
   const port = await portLibre();
   const rc = await new Recepteur({ port, hote: '127.0.0.1', emetteurs: () => emetteurs, surObservation: o => lues.push(o), log: silence }).demarrer();
   try {
-    const ligne = `<4>Oct 13 10:00:01 udm kernel: [WAN_IN-D-1] SRC=${ATTAQUANT} DST=203.0.113.5 PROTO=TCP SPT=1 DPT=22`;
+    const ligne = `<4>Oct 13 10:00:01 passerelle kernel: [WAN_IN-D-1] SRC=${ATTAQUANT} DST=203.0.113.5 PROTO=TCP SPT=1 DPT=22`;
     const u = dgram.createSocket('udp4');
     await new Promise(r => u.send(`${ligne}\n${ligne}\nbruit`, port, '127.0.0.1', r));
     for (let i = 0; i < 50 && lues.length < 2; i++) await attendre(10);
@@ -432,7 +432,7 @@ test('récepteur : UDP et TCP (lignes et cadrage par longueur), émetteurs filtr
   // Un émetteur non déclaré qui inonde ne fait pas déborder la passerelle déclarée.
   const vues = [];
   const r2 = new Recepteur({ emetteurs: () => ['10.9.1.1'], surObservation: o => vues.push(o), log: silence, maintenant: () => 1000 });
-  const l2 = `<4>Oct 13 10:00:01 udm kernel: [WAN_IN-D-1] SRC=${ATTAQUANT} DST=203.0.113.5 PROTO=TCP SPT=1 DPT=22`;
+  const l2 = `<4>Oct 13 10:00:01 passerelle kernel: [WAN_IN-D-1] SRC=${ATTAQUANT} DST=203.0.113.5 PROTO=TCP SPT=1 DPT=22`;
   for (let i = 0; i < 5000; i++) r2.ligne(l2, '10.9.1.66');
   r2.ligne(l2, '10.9.1.1');
   assert.deepEqual([vues.length, r2.stats.refusees, r2.stats.debordees], [1, 5000, 0]);

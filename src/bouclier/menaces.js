@@ -7,7 +7,7 @@
 // Ces listes ne bloquent rien à elles seules : elles pèsent dans le score
 // d'une adresse que VIGIE voit vraiment passer (corrélation.js). C'est
 // l'approche d'un « bouncer » : on bloque ce qui frappe, pas un million
-// d'adresses par précaution — le pare-feu de l'UDM n'en tiendrait pas autant.
+// d'adresses par précaution — le pare-feu d'une passerelle n'en tiendrait pas autant.
 import fs from 'node:fs';
 import path from 'node:path';
 import { EnsembleIp, estPublique } from './ip.js';

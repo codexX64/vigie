@@ -1,4 +1,4 @@
-// La passerelle UniFi (UDM, UDM-SE, UCG…) par son API officielle d'intégration
+// La passerelle UniFi par son API officielle d'intégration
 // (UniFi Network 9 et plus) : clé d'API créée dans Paramètres → Control Plane
 // → Integrations, envoyée dans X-API-KEY, et rien d'autre.
 //
