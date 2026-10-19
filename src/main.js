@@ -42,6 +42,13 @@ export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = gl
   const db = ouvrirBase(cfg.donnees);
   const socle = await demarrerSocle({ service: { id: 'vigie', nom: 'VIGIE', contactSecurite: CONTACT_SECURITE }, db, dossier: cfg.donnees, env, log });
   const magasin = new Magasin(db, { coffre: socle.coffre });
+  let bilan;
+  try { bilan = magasin.resceller(); } catch (e) { socle.arreter(); db.close(); throw e; }
+  if (bilan.rescelles) log.info?.(`[coffre] ${bilan.rescelles} secret(s) de VIGIE rescellé(s) sous SOCLE_CLE.`);
+  if (bilan.retires) {
+    log.warn?.(`[coffre] ${bilan.retires} secret(s) de VIGIE illisible(s) sous les deux clés, retiré(s) : à ressaisir dans les réglages.`);
+    socle.journal.ecrire({ acteur: 'système', action: 'coffre.secrets_retires', resultat: 'erreur', details: { n: bilan.retires } });
+  }
   appliquerIaDuHub(cfg, magasin, log);
 
   const sources = new Sources({ cfg, magasin, fetch: f, ...(sonde ? { sonde } : {}) });

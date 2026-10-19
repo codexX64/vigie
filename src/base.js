@@ -107,6 +107,34 @@ const json = (s, defaut) => { try { return s ? JSON.parse(s) : defaut; } catch {
 export class Magasin {
   constructor(db, { coffre }) { this.db = db; this.coffre = coffre; }
 
+  // Après une rotation de SOCLE_CLE (le socle a rescellé ses propres secrets) :
+  // ceux de VIGIE, scellés sous l'ancienne clé, sont rescellés sous la neuve.
+  //   - sans SOCLE_CLE_ANCIENNE posée, le démarrage s'arrête (la reposer le
+  //     temps d'un démarrage suffit, rien n'est perdu) ;
+  //   - avec elle, un secret illisible sous les deux clés est retiré et le
+  //     bilan le dit : il se ressaisit dans les réglages.
+  resceller() {
+    const avant = this.coffre.precedente;
+    const bilan = { rescelles: 0, retires: 0 };
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const [nom, champs] of Object.entries(SCELLES)) {
+        const r = this.reglage(nom), maj = {};
+        for (const champ of champs) {
+          const scelle = r[champ];
+          if (!scelle) continue;
+          try { this.coffre.ouvre(`${nom}.${champ}`, scelle); continue; } catch { /* scellé sous une autre clé */ }
+          if (!avant) throw new Error(`Un secret de VIGIE (${nom}) est illisible sous SOCLE_CLE : repose la clé remplacée dans SOCLE_CLE_ANCIENNE le temps d'un démarrage.`);
+          try { maj[champ] = this.coffre.scelle(`${nom}.${champ}`, avant.ouvre(`${nom}.${champ}`, scelle)); bilan.rescelles++; } catch { maj[champ] = null; bilan.retires++; }
+        }
+        if (Object.keys(maj).length) this.poserReglage(nom, maj);
+      }
+      this.db.exec('COMMIT');
+    } catch (e) { this.db.exec('ROLLBACK'); throw e; }
+    return bilan;
+  }
+
+
   // ---- réglages ----
   reglage(nom) {
     const l = this.db.prepare('SELECT valeur FROM reglages WHERE cle = ?').get(nom);

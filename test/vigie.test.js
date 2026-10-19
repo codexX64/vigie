@@ -522,3 +522,22 @@ test('manifeste : une seule version partout, port des journaux publié en UDP et
   for (const id of ['threat.blocked', 'host.compromised', 'host.alert']) assert.ok(m.triggers.some(t => t.id === id), id);
   for (const id of ['shield.state', 'sentinel.state', 'ip.block']) assert.ok(m.actions.some(a => a.id === id), id);
 });
+
+test('rotation de SOCLE_CLE : les secrets de VIGIE sont rescellés, rien n’est perdu', async () => {
+  const dossier = path.join(tmp, 'rotation');
+  const cle = k => Buffer.alloc(32, k).toString('base64');
+  const lancer = extra => demarrer({ DATA_DIR: dossier, PORT: '0', HOTE: '127.0.0.1', VIGIE_HUB_TOKEN: JETON_HUB, SOCLE_JETON_INSTALLATION: INSTALL, VIGIE_SYSLOG_PORT: '0', ...extra }, { log: silence, sonde: fausseSonde, fetchMenaces: async () => new Response('', { status: 404 }) });
+  let v = await lancer({ SOCLE_CLE: cle(1) });
+  try {
+    v.magasin.poserSecret('telegram', 'jeton', JETON_TG);
+    v.magasin.poserSecret('bouclier', 'cloudflareJeton', 'jeton-cloudflare-de-l-essai-0123');
+    await v.arreter(); v = null;
+    // Sans l'ancienne clé : arrêt net plutôt que des secrets perdus.
+    await assert.rejects(lancer({ SOCLE_CLE: cle(2) }), /SOCLE_CLE/);
+    v = await lancer({ SOCLE_CLE: cle(2), SOCLE_CLE_ANCIENNE: cle(1) });
+    assert.equal(v.magasin.secret('telegram', 'jeton'), JETON_TG);
+    await v.arreter(); v = null;
+    v = await lancer({ SOCLE_CLE: cle(2) });
+    assert.equal(v.magasin.secret('bouclier', 'cloudflareJeton'), 'jeton-cloudflare-de-l-essai-0123', 'sous la seule clé neuve');
+  } finally { await v?.arreter(); }
+});
