@@ -358,6 +358,7 @@ export function creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, di
     for (const x of [...(b.listeBlanche || []), ...(b.emetteurs || [])]) if (!plage(x)) throw new ErreurHttp(400, `Adresse ou plage invalide : ${x}.`);
     if (b.listes) for (const [k, v] of Object.entries(b.listes)) if (!/^[a-z0-9-]{2,40}$/.test(k) || typeof v !== 'boolean') throw new ErreurHttp(400, 'Champ « listes » : identifiant et vrai/faux attendus.');
     magasin.poserReglage('bouclier', b);
+    bouclier.rafraichir();
     journal.ecrire({ acteur: s.compte, action: 'reglages.bouclier', objet: 'bouclier', ip: ctx.ip, details: { ...b } });
     if (b.listes || b.listesPropres) bouclier.menaces.actualiser().catch(() => null);
     return vueBouclier();

@@ -29,6 +29,7 @@ export const LISTE_BLANCHE_DEFAUT = [
 ];
 
 const ref = () => crypto.randomBytes(9).toString('base64url');
+export const NON_VERIFIE = 'Ces journaux viennent d’un émetteur non déclaré : n’importe quelle machine du réseau peut les écrire, VIGIE n’agit donc pas seule. Déclare la passerelle dans Bouclier → Réglages → Émetteurs.';
 
 export function preparerBase(db) {
   db.exec(`
@@ -83,11 +84,16 @@ export class Riposte {
   async verdict(v) {
     const r = this.reglage();
     if (v.interne) {
-      await this.signaler({ gravite: 'critique', type: 'bouclier.interne', titre: `Machine du réseau suspecte : ${v.ip} (score ${v.score})`, texte: v.raisons.join(' ; '), sujet: v.ip, cle: `bouclier.interne:${v.ip}`, ip: v.ip });
+      await this.signaler({ gravite: 'critique', type: 'bouclier.interne', titre: `Machine du réseau suspecte : ${v.ip} (score ${v.score})`, texte: `${v.raisons.join(' ; ')}${v.fiable === false ? `. ${NON_VERIFIE}` : ''}`, sujet: v.ip, cle: `bouclier.interne:${v.ip}`, ip: v.ip });
       return null;
     }
     const refus = this.refus(v.ip);
     if (refus) return null;
+    // Rien de bloqué seul sur la foi de journaux qu'une machine du réseau a pu écrire.
+    if (v.fiable === false && r.mode !== 'observer') {
+      await this.signaler({ gravite: 'eleve', type: 'bouclier.signalee', titre: `Menace extérieure non bloquée : ${v.ip} (score ${v.score})`, texte: `${v.raisons.join(' ; ')}. ${NON_VERIFIE}`, sujet: v.ip, cle: `bouclier.signalee:${v.ip}` });
+      return null;
+    }
     if (r.mode === 'observer') {
       await this.signaler({ gravite: 'faible', type: 'bouclier.menace', titre: `Menace extérieure : ${v.ip} (score ${v.score})`, texte: `${v.raisons.join(' ; ')}. Mode observation : rien n’est bloqué.`, sujet: v.ip, cle: `bouclier.menace:${v.ip}` });
       return null;
@@ -267,21 +273,21 @@ export class Riposte {
   async tempete(tp) {
     const r = this.reglage();
     const bloquees = [];
-    if (r.mode === 'actif') {
+    if (r.mode === 'actif' && tp.fiable !== false) {
       for (const { ip } of tp.top.slice(0, r.tempeteBlocages || 20)) {
         if (this.refus(ip) || this.actif(ip)) continue;
         try { bloquees.push((await this.bloquer({ ip, motif: `tempête sur le port ${tp.port}`, raisons: [`tempête : ${tp.sources} sources sur le port ${tp.port}, ${tp.parMinute} lignes en une minute`], score: 1000, auteur: 'vigie', automatique: true })).ip); } catch { /* refusée */ }
       }
     }
     let attaque = null;
-    if (r.cloudflareModeAttaque && this.cloudflare() && (r.cloudflareZones || []).length) {
+    if (tp.fiable !== false && r.cloudflareModeAttaque && this.cloudflare() && (r.cloudflareZones || []).length) {
       try { attaque = await this.modeAttaque(true, { minutes: r.tempeteMinutes || 15, motif: `tempête sur le port ${tp.port}` }); }
       catch (e) { this.log.warn?.(`[cloudflare] mode attaque : ${e.message}`); }
     }
     await this.signaler({
       gravite: 'critique', type: 'bouclier.tempete', forcer: true,
       titre: `Tempête sur le port ${tp.port} : ${tp.sources} adresses, ${tp.parMinute} paquets en une minute`,
-      texte: `${bloquees.length ? `${bloquees.length} adresses les plus bruyantes bloquées à la frontière` : 'Mode ' + r.mode + ' : rien bloqué'}${attaque ? ' · Cloudflare en mode Under Attack' : ''}. Au-delà de la frontière, un déni de service volumétrique se traite en amont (Cloudflare, fournisseur d’accès).`,
+      texte: `${bloquees.length ? `${bloquees.length} adresses les plus bruyantes bloquées à la frontière` : tp.fiable === false ? `Rien bloqué. ${NON_VERIFIE}` : 'Mode ' + r.mode + ' : rien bloqué'}${attaque ? ' · Cloudflare en mode Under Attack' : ''}. Au-delà de la frontière, un déni de service volumétrique se traite en amont (Cloudflare, fournisseur d’accès).`,
       sujet: `port ${tp.port}`, cle: `bouclier.tempete:${tp.port}`,
     });
     return { bloquees, attaque };

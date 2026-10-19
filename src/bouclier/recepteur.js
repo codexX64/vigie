@@ -47,6 +47,8 @@ export class Recepteur {
     }
     this.stats.lues++;
     this.stats.derniere = t;
+    // Sans émetteur déclaré, toute adresse privée est lue : la ligne peut venir de n'importe quelle machine du réseau.
+    o.verifie = this.emetteurs().length > 0;
     try { this.surObservation(o); } catch (e) { this.log.warn?.(`[syslog] ${e.message}`); }
   }
 

@@ -250,6 +250,26 @@ test('riposte : jamais le privé ni la liste blanche, récidive qui allonge, lev
   assert.match(r.texteListe(), /^# VIGIE : 2 adresses bloquées/);
 });
 
+test('bouclier : des journaux d’un émetteur non déclaré ne font rien bloquer ni isoler seul, une source authentifiée si', async () => {
+  // Corrélation : la fiabilité suit les capteurs qui ont apporté les points.
+  const { c, verdicts } = correlateur();
+  c.observer(ips(ATTAQUANT, '10.9.1.2', 1, 'ET x', { verifie: false }));
+  assert.equal(verdicts[0].fiable, false, 'syslog sans émetteur déclaré');
+  c.observer(ips('91.92.93.95', '10.9.1.2', 1));
+  assert.equal(verdicts[1].fiable, true, 'sonde ou relève de MapMyLAN');
+  // Riposte : signalé, jamais bloqué seul.
+  const a = riposte({ mode: 'actif' });
+  assert.equal(await a.r.verdict(verdict(ATTAQUANT, { fiable: false })), null);
+  assert.equal(a.r.blocages().length, 0);
+  assert.equal(a.signaux[0].type, 'bouclier.signalee');
+  assert.match(a.signaux[0].texte, /émetteur non déclaré/);
+  assert.equal((await a.r.verdict(verdict(ATTAQUANT, { fiable: true }))).etat, 'actif');
+  // Tempête faite de lignes non vérifiées : rien bloqué.
+  const t = await a.r.tempete({ port: 22, sources: 60, parMinute: 900, paquets: 900, top: [{ ip: '80.2.2.2', n: 30 }], fiable: false });
+  assert.deepEqual(t.bloquees, []);
+  assert.match(a.signaux.at(-1).texte, /^Rien bloqué/);
+});
+
 test('riposte : observer, simulation, plafond horaire', async () => {
   const o = riposte({ mode: 'observer' });
   assert.equal(await o.r.verdict(verdict(ATTAQUANT)), null);

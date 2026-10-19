@@ -211,10 +211,21 @@ test('API : des journaux d’hôte en syslog deviennent alertes, événement, po
 
   const u = dgram.createSocket('udp4');
   const envoyer = l => new Promise(r => u.send(l, portSyslog, '127.0.0.1', r));
+  // Sans émetteur déclaré, une force brute lue en syslog est signalée, pas bloquée : n'importe quelle machine du réseau a pu l'écrire.
+  for (let i = 0; i < 9; i++) await envoyer(`<38>Oct 15 09:00:0${i} srv0 sshd[1]: Failed password for root from 45.155.205.11 port ${50000 + i} ssh2`);
+  for (let i = 0; i < 100 && vigie.bouclier.recepteur.stats.hotes < 9; i++) await attendre(10);
+  await envoyer(`<38>Oct 15 09:00:20 srv0 sshd[1]: Accepted password for root from 45.155.205.11 port 2 ssh2`);
+  let nv;
+  for (let i = 0; i < 100; i++) { nv = (await admin.get('/api/evenements?type=bouclier.signalee')).json; if (nv.length) break; await attendre(10); }
+  assert.ok(nv.some(x => x.sujet === '45.155.205.11'), 'signalée comme non vérifiée');
+  assert.ok(!(await admin.get('/api/bouclier')).json.blocages.some(x => x.ip === '45.155.205.11'), 'pas bloquée');
+  // La passerelle (ici la boucle locale) déclarée : ses journaux font foi.
+  assert.equal((await admin.put('/api/reglages/bouclier', { emetteurs: ['127.0.0.1'] })).status, 200);
+
   for (let i = 0; i < 9; i++) await envoyer(`<38>Oct 15 10:00:0${i} srv1 sshd[1]: Failed password for root from ${ATTAQUANT} port ${50000 + i} ssh2`);
   await envoyer(`<38>Oct 15 10:00:20 srv1 sshd[1]: Accepted password for root from ${ATTAQUANT} port 2 ssh2`);
   await envoyer('<4>Oct 15 10:01:01 udm kernel: [WAN_IN-D-1] SRC=203.0.113.77 DST=203.0.113.5 PROTO=TCP SPT=1 DPT=22');
-  for (let i = 0; i < 100 && vigie.bouclier.recepteur.stats.hotes < 10; i++) await attendre(10);
+  for (let i = 0; i < 100 && vigie.bouclier.recepteur.stats.hotes < 20; i++) await attendre(10);
   // Le même hôte, vu depuis une adresse du réseau (le banc envoie en boucle locale, qui n'est pas « interne »).
   assert.equal(vigie.sentinelle.ligne('<86>Oct 15 10:01:00 srv1 useradd[9]: new user: name=svc, UID=1004, GID=1004, home=/home/svc, shell=/bin/bash', '10.9.1.3', Date.now()), true);
   let e;

@@ -16,6 +16,8 @@ export class Bouclier {
     Object.assign(this, { cfg, db, magasin, moteur, sources, journal, log, maintenant });
     // Lu à chaque observation : gardé cinq secondes plutôt que relu en base des milliers de fois.
     let cache = { t: 0, r: null };
+    // Un réglage changé dans l'API vaut tout de suite (émetteurs, seuils), sans attendre la fin du cache.
+    this.rafraichir = () => { cache = { t: 0, r: null }; };
     const reglage = () => {
       const t = Date.now();
       if (!cache.r || t - cache.t > 5000) cache = { t, r: this.magasin.reglage('bouclier') };
@@ -49,7 +51,7 @@ export class Bouclier {
   async surVerdict(v) {
     const b = await this.riposte.verdict(v);
     // Une machine du réseau : la réaction rapide de la veille décide, sous ses propres règles.
-    if (v.interne && this.sources.public().mapmylan?.relie) {
+    if (v.interne && v.fiable !== false && this.sources.public().mapmylan?.relie) {
       const a = await this.sources.appareilParIp(v.ip).catch(() => null);
       if (a) await this.moteur.reagir(a, { titre: `comportement de machine compromise (${v.raisons[0] || 'score ' + v.score})` });
     }

@@ -79,7 +79,12 @@ Une clé d'API UniFi posée dans VIGIE passe avant.
 `SYSLOG_PORT` dans le Hub) : CEF d'UniFi Network (Activity Logging → SIEM
 Server), lignes du pare-feu (CyberSecure → Traffic Logging), et EVE JSON de
 Suricata si une sonde existe ailleurs. Seuls les émetteurs déclarés sont lus
-— un journal se falsifie, et VIGIE agit sur ce qu'il lit.
+— un journal se falsifie, et VIGIE agit sur ce qu'il lit. Tant qu'aucun
+émetteur n'est déclaré, toute adresse privée est lue, mais ce qu'elle écrit ne
+fait rien bloquer ni isoler seul : VIGIE le signale (« menace signalée »),
+puisque n'importe quelle machine du réseau a pu l'écrire. Déclarer la
+passerelle (Bouclier → Réglages → Émetteurs) rend la riposte automatique ; les
+sondes, qui ont leur jeton, et la relève par MapMyLAN font toujours foi.
 
 **Comment il note** (idées de Suricata, sshguard, psad et CrowdSec, pas leur
 code). Chaque observation ajoute des points à l'adresse qui la porte, avec sa

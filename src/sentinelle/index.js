@@ -50,7 +50,8 @@ export class SentinelleVigie {
     // des signes de compromission aussi, par l'adresse qui nous a envoyé son journal.
     if (r.correler && this.bouclier && points) {
       const c = this.bouclier.correlateur;
-      const obs = { type: 'sentinelle', quand: a.quand, capteur: `syslog:${a.emetteur}`, hote: a.hote, regle: a.regle };
+      // Les journaux d'hôtes arrivent par le syslog : sans émetteur déclaré, n'importe quelle machine du réseau a pu les écrire.
+      const obs = { type: 'sentinelle', quand: a.quand, capteur: `syslog:${a.emetteur}`, hote: a.hote, regle: a.regle, verifie: (this.magasin.reglage('bouclier').emetteurs || []).length > 0 };
       const raison = `${a.description} (${a.hote || a.emetteur}${a.champs.utilisateur ? `, compte ${a.champs.utilisateur}` : ''})`;
       if (ip && estPublique(ip)) c.noter(ip, { points, raison, cle: `sentinelle:${a.regle}`, observation: obs });
       else if (ip && estInterne(ip) && ip !== a.emetteur && a.groupes.some(g => ['force-brute', 'balayage', 'web-attaque'].includes(g))) {

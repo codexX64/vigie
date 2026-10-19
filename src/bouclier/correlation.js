@@ -45,7 +45,7 @@ export class Correlateur {
   constructor({ menaces, reglage = () => ({}), surVerdict = () => {}, surTempete = () => {}, maintenant = () => Date.now() }) {
     Object.assign(this, { menaces, reglage, surVerdict, surTempete, maintenant });
     // La tempête : ce qui entre, compté par minute et par port, et les sources distinctes.
-    this.tempete = { debut: 0, lignes: 0, parPort: new Map(), dernieres: new Map(), courante: null };
+    this.tempete = { debut: 0, lignes: 0, fiables: 0, parPort: new Map(), dernieres: new Map(), courante: null };
     this.adresses = new Map();      // ip → { score, maj, raisons[], premier, interne, alerte, ports:Map, cibles:Map, auth, verdict }
     this.recentes = [];             // dernières alertes IPS, pour l'interface
     this.compteurs = {};            // type → nombre d'observations
@@ -57,13 +57,13 @@ export class Correlateur {
     const t = this.maintenant();
     if (!a) {
       if (this.adresses.size >= MAX_ADRESSES) this.elaguer();
-      a = { ip, score: 0, maj: t, premier: t, interne, raisons: [], ports: new Map(), cibles: new Map(), auth: [], verdict: false, vu: 0 };
+      a = { ip, score: 0, maj: t, premier: t, interne, raisons: [], ports: new Map(), cibles: new Map(), auth: [], verdict: false, vu: 0, fiable: false };
       this.adresses.set(ip, a);
     }
     // Effacement : demi-vie en minutes.
     const demi = Math.max(5, this.reglage().demiVieMinutes || 60) * 60e3;
     a.score *= 0.5 ** ((t - a.maj) / demi);
-    if (a.score < 1) a.score = 0;
+    if (a.score < 1) { a.score = 0; a.fiable = false; }
     if (a.verdict && a.score < this.seuil(a) / 2) a.verdict = false;
     a.maj = t;
     a.vu++;
@@ -79,12 +79,14 @@ export class Correlateur {
     if (points <= 0) return;
     const t = this.maintenant();
     a.score = Math.min(1000, a.score + points);
+    // Fiable dès qu'un point vient d'un capteur authentifié (sonde, MapMyLAN) ou d'un émetteur de journaux déclaré.
+    if (o?.verifie !== false) a.fiable = true;
     const r = a.raisons.find(x => x.cle === cle);
     if (r) { r.n++; r.der = t; r.points += points; } else a.raisons.unshift({ cle, texte: raison, points, n: 1, der: t, capteur: o?.capteur || '' });
     a.raisons = a.raisons.slice(0, 12);
     if (!a.verdict && a.score >= this.seuil(a)) {
       a.verdict = true;
-      this.surVerdict({ ip: a.ip, interne: a.interne, score: Math.round(a.score), raisons: a.raisons.slice(0, 6).map(x => x.texte), observation: o || null });
+      this.surVerdict({ ip: a.ip, interne: a.interne, score: Math.round(a.score), raisons: a.raisons.slice(0, 6).map(x => x.texte), observation: o || null, fiable: a.fiable });
     }
   }
 
@@ -186,10 +188,11 @@ export class Correlateur {
   compterTempete(o, t) {
     const T = this.tempete;
     if (t - T.debut >= 60e3) {
-      T.debut = t; T.lignes = 0; T.parPort.clear();
+      T.debut = t; T.lignes = 0; T.fiables = 0; T.parPort.clear();
       if (T.courante && t - T.courante.quand > 2 * 60e3) T.courante = null;
     }
     T.lignes++;
+    if (o.verifie !== false) T.fiables++;
     const port = o.dport || 0;
     let p = T.parPort.get(port);
     if (!p) { if (T.parPort.size > 500) return; p = new Map(); T.parPort.set(port, p); }
@@ -202,7 +205,8 @@ export class Correlateur {
     if (T.dernieres.size > 500) T.dernieres.clear();
     const top = [...p.entries()].sort((a, b) => b[1] - a[1]).slice(0, 50).map(([ip, n]) => ({ ip, n }));
     const paquets = [...p.values()].reduce((a, b) => a + b, 0);
-    T.courante = { quand: t, port, sources: p.size, paquets, parMinute: T.lignes, top };
+    // Fiable si la tempête tient sur les seules lignes des capteurs authentifiés ou des émetteurs déclarés.
+    T.courante = { quand: t, port, sources: p.size, paquets, parMinute: T.lignes, top, fiable: T.fiables >= seuilLignes };
     try { this.surTempete(T.courante); } catch { /* le bouclier dit lui-même ses erreurs */ }
   }
 
