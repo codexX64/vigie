@@ -158,9 +158,9 @@ function preuveTexte(p) {
   for (const [k, v] of Object.entries(p)) {
     if (v === null || v === undefined || v === '') continue;
     if (DATES.has(k) && typeof v === 'number') { parts.push(`${k} : ${new Date(v).toISOString().slice(0, 16).replace('T', ' ')} UTC`); continue; }
-    const val = Array.isArray(v) ? v.slice(0, 6).map(x => (typeof x === 'object' ? Object.values(x).filter(y => y !== null && y !== undefined).join(' ') : x)).join(', ')
+    const valeur = Array.isArray(v) ? v.slice(0, 6).map(x => (typeof x === 'object' ? Object.values(x).filter(y => y !== null && y !== undefined).join(' ') : x)).join(', ')
       : typeof v === 'object' ? JSON.stringify(v).slice(0, 120) : String(v);
-    parts.push(`${k} : ${val}`);
+    parts.push(`${k} : ${valeur}`);
   }
   return parts.join(' · ').slice(0, 600);
 }

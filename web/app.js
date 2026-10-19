@@ -141,8 +141,8 @@ function anneau(score, delta) {
   const r = 52, c = 2 * Math.PI * r, part = 0.75;
   const svg = s('svg', { viewBox: '0 0 120 120', 'aria-hidden': 'true' });
   const fond = s('circle', { cx: 60, cy: 60, r, fill: 'none', 'stroke-width': 10, class: 'fond', 'stroke-linecap': 'round', 'stroke-dasharray': `${c * part} ${c}`, transform: 'rotate(135 60 60)' });
-  const val = s('circle', { cx: 60, cy: 60, r, fill: 'none', 'stroke-width': 10, class: `val ${classeScore(score)}`, 'stroke-linecap': 'round', 'stroke-dasharray': `${c * part * (score ?? 0) / 100} ${c}`, transform: 'rotate(135 60 60)' });
-  svg.append(fond, ...(score ? [val] : []));
+  const arc = s('circle', { cx: 60, cy: 60, r, fill: 'none', 'stroke-width': 10, class: `val ${classeScore(score)}`, 'stroke-linecap': 'round', 'stroke-dasharray': `${c * part * (score ?? 0) / 100} ${c}`, transform: 'rotate(135 60 60)' });
+  svg.append(fond, ...(score ? [arc] : []));
   return h('div', {},
     h('div', { class: 'anneau', role: 'img', 'aria-label': `Score ${score ?? 'non évalué'} sur 100` }, svg, h('div', { class: 'chiffre' }, h('b', { text: score ?? '—' }), h('span', { text: 'score / 100' }))),
     delta === null || delta === undefined ? null : h('p', { class: `tendance ${delta > 0 ? 'hausse' : delta < 0 ? 'baisse' : ''}`, text: delta === 0 ? 'stable depuis le dernier audit' : `${delta > 0 ? '+' : ''}${delta} depuis le dernier audit` }));

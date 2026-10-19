@@ -218,29 +218,29 @@ export class IA {
     };
     const essayer = async (ou, t) => { try { return await passe(ou, t); } catch (e) { erreurs.push(`${ou} : ${e.message}`); return null; } };
 
-    let res = null, moteur = null;
-    if (mode === 'locale') { res = await essayer('locale', texte); moteur = 'locale'; }
-    else if (mode === 'cloud') { res = await essayer('cloud', texte); moteur = 'cloud'; }
+    let relu = null, moteur = null;
+    if (mode === 'locale') { relu = await essayer('locale', texte); moteur = 'locale'; }
+    else if (mode === 'cloud') { relu = await essayer('cloud', texte); moteur = 'cloud'; }
     else if (mode === 'secours') {
-      res = await essayer('locale', texte); moteur = 'locale';
-      if (!res) { res = await essayer('cloud', texte); moteur = 'cloud'; }
+      relu = await essayer('locale', texte); moteur = 'locale';
+      if (!relu) { relu = await essayer('cloud', texte); moteur = 'cloud'; }
     } else if (mode === 'les-deux') {
       const premiere = await essayer('locale', texte);
       const t2 = premiere ? promptUtilisateur({ liste, scores, memoire, precedente: { verdicts: premiere.verdicts, scenarios: premiere.scenarios } }) : texte;
-      res = await essayer('cloud', t2); moteur = premiere ? 'locale+cloud' : 'cloud';
-      if (!res && premiere) { res = premiere; moteur = 'locale'; }
+      relu = await essayer('cloud', t2); moteur = premiere ? 'locale+cloud' : 'cloud';
+      if (!relu && premiere) { relu = premiere; moteur = 'locale'; }
     }
-    if (!res) return { ignore: 'relecture impossible', erreurs };
+    if (!relu) return { ignore: 'relecture impossible', erreurs };
     // Les numéros redeviennent des constats.
     const cleDe = n => graves[n - 1]?.cle;
     // Un constat critique n'est jamais écarté par l'IA : au plus nuancé (ses données peuvent l'avoir trompée).
-    const verdicts = Object.fromEntries(Object.entries(res.verdicts).map(([n, v]) => [cleDe(Number(n)),
+    const verdicts = Object.fromEntries(Object.entries(relu.verdicts).map(([n, v]) => [cleDe(Number(n)),
       v.statut === 'ecarte' && graves[Number(n) - 1]?.gravite === 'critique' ? { ...v, statut: 'nuance' } : v]));
-    const corrections = Object.fromEntries(Object.entries(res.corrections).map(([n, e]) => [cleDe(Number(n)), e]));
+    const corrections = Object.fromEntries(Object.entries(relu.corrections).map(([n, e]) => [cleDe(Number(n)), e]));
     return {
-      moteur, modele: res.modele, verdicts, corrections, synthese: res.synthese, erreurs,
-      scenarios: res.scenarios.map(s => ({ ...s, constats: s.constats.map(cleDe).filter(Boolean) })),
-      priorites: res.priorites.map(p => ({ ...p, constats: p.constats.map(cleDe).filter(Boolean) })),
+      moteur, modele: relu.modele, verdicts, corrections, synthese: relu.synthese, erreurs,
+      scenarios: relu.scenarios.map(s => ({ ...s, constats: s.constats.map(cleDe).filter(Boolean) })),
+      priorites: relu.priorites.map(p => ({ ...p, constats: p.constats.map(cleDe).filter(Boolean) })),
     };
   }
 

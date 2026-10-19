@@ -143,11 +143,11 @@ export class Sources {
   }
 
   async sonderTout(cibles) {
-    const res = [];
+    const sondees = [];
     let i = 0;
-    const ouvrier = async () => { while (i < cibles.length) { const c = cibles[i++]; res.push({ ...c, ...(await this.sonde(c.ip, c.port)) }); } };
+    const ouvrier = async () => { while (i < cibles.length) { const c = cibles[i++]; sondees.push({ ...c, ...(await this.sonde(c.ip, c.port)) }); } };
     await Promise.all(Array.from({ length: Math.min(PARALLELE_TLS, cibles.length) }, ouvrier));
-    return res;
+    return sondees;
   }
 
   /** Une passe complète de collecte. Chaque source échoue seule. */

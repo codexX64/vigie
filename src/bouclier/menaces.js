@@ -90,10 +90,10 @@ export class Menaces {
       const e = this.etat[id] || {};
       if (!forcer && e.maj && this.maintenant() - e.maj < heures * 3600e3 && (this.ip.has(id) || this.dom.has(id))) continue;
       try {
-        const res = await this.fetch(def.url, { signal: AbortSignal.timeout(60_000), headers: { 'User-Agent': 'VIGIE (defensive network monitor)' } });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const reponse = await this.fetch(def.url, { signal: AbortSignal.timeout(60_000), headers: { 'User-Agent': 'VIGIE (defensive network monitor)' } });
+        if (!reponse.ok) throw new Error(`HTTP ${reponse.status}`);
         // Lue morceau par morceau, abandonnée au-delà de la taille permise : jamais entière en mémoire d'abord.
-        const texte = (await lireBorne(res, TAILLE_MAX)).toString('utf8');
+        const texte = (await lireBorne(reponse, TAILLE_MAX)).toString('utf8');
         const n = this.charger(id, texte);
         if (!n) throw new Error('liste vide ou illisible');
         fs.writeFileSync(this.fichier(id), texte, { mode: 0o600 });

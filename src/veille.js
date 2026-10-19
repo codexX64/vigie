@@ -90,12 +90,12 @@ export class Moteur {
     if (r.mode === 'aucune') { this.magasin.poserIA(id, { statut: 'aucune' }); return; }
     this.magasin.poserIA(id, { statut: 'en cours', mode: r.mode });
     const memoire = await this.memoire.briefer(`audit de sécurité réseau : ${prio.map(p => p.titre).join(' ; ') || 'aucune priorité'}`);
-    let res;
-    try { res = await this.ia.relire({ constats, scores: notes, memoire }); } catch (e) { res = { ignore: 'relecture impossible', erreurs: [e.message] }; }
-    if (res.ignore) { this.magasin.poserIA(id, { statut: 'ignoree', raison: res.ignore, erreurs: res.erreurs || [] }); return; }
+    let relecture;
+    try { relecture = await this.ia.relire({ constats, scores: notes, memoire }); } catch (e) { relecture = { ignore: 'relecture impossible', erreurs: [e.message] }; }
+    if (relecture.ignore) { this.magasin.poserIA(id, { statut: 'ignoree', raison: relecture.ignore, erreurs: relecture.erreurs || [] }); return; }
     const parCle = new Map(this.magasin.constats(id).map(c => [c.cle, c.id]));
-    for (const [cle, v] of Object.entries(res.verdicts)) if (parCle.has(cle)) this.magasin.verdictIA(parCle.get(cle), v.statut, v.note);
-    this.magasin.poserIA(id, { statut: 'faite', moteur: res.moteur, modele: res.modele, synthese: res.synthese, scenarios: res.scenarios, priorites: res.priorites, corrections: res.corrections, erreurs: res.erreurs, memoire: !!memoire });
+    for (const [cle, v] of Object.entries(relecture.verdicts)) if (parCle.has(cle)) this.magasin.verdictIA(parCle.get(cle), v.statut, v.note);
+    this.magasin.poserIA(id, { statut: 'faite', moteur: relecture.moteur, modele: relecture.modele, synthese: relecture.synthese, scenarios: relecture.scenarios, priorites: relecture.priorites, corrections: relecture.corrections, erreurs: relecture.erreurs, memoire: !!memoire });
   }
 
   // Événements

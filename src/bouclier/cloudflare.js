@@ -22,15 +22,15 @@ export class Cloudflare {
   }
 
   async appel(methode, chemin, corps) {
-    let res;
+    let reponse;
     try {
-      res = await this.fetch(API + chemin, { method: methode, redirect: 'error', signal: AbortSignal.timeout(20_000), headers: { authorization: `Bearer ${this.jeton}`, 'content-type': 'application/json', 'user-agent': 'VIGIE (defensive network monitor)' }, body: corps === undefined ? undefined : JSON.stringify(corps) });
+      reponse = await this.fetch(API + chemin, { method: methode, redirect: 'error', signal: AbortSignal.timeout(20_000), headers: { authorization: `Bearer ${this.jeton}`, 'content-type': 'application/json', 'user-agent': 'VIGIE (defensive network monitor)' }, body: corps === undefined ? undefined : JSON.stringify(corps) });
     } catch (e) { throw new ErreurCloudflare(`Cloudflare injoignable : ${e.message}`); }
     let j = null;
-    try { j = await jsonBorne(res, 8 * 1024 * 1024); } catch (e) { if (e instanceof ReponseTropGrande) throw new ErreurCloudflare(`Cloudflare : ${e.message}`); }
-    if (!res.ok || !j?.success) {
-      const m = j?.errors?.map(e => `${e.code} ${e.message}`).join(' ; ') || `HTTP ${res.status}`;
-      throw Object.assign(new ErreurCloudflare(`Cloudflare : ${m}`), { status: res.status, codes: (j?.errors || []).map(e => e.code) });
+    try { j = await jsonBorne(reponse, 8 * 1024 * 1024); } catch (e) { if (e instanceof ReponseTropGrande) throw new ErreurCloudflare(`Cloudflare : ${e.message}`); }
+    if (!reponse.ok || !j?.success) {
+      const m = j?.errors?.map(e => `${e.code} ${e.message}`).join(' ; ') || `HTTP ${reponse.status}`;
+      throw Object.assign(new ErreurCloudflare(`Cloudflare : ${m}`), { status: reponse.status, codes: (j?.errors || []).map(e => e.code) });
     }
     return j;
   }

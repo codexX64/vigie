@@ -56,13 +56,13 @@ export function requete({ hote, port, fp }, { methode = 'GET', chemin, entetes =
       host: hote, port, method: methode, path: chemin, timeout,
       headers: { Accept: 'application/json', ...(donnees ? { 'Content-Type': 'application/json', 'Content-Length': donnees.length } : {}), ...entetes },
       createConnection: (_o, rappel) => { connecter({ hote, port, fp }, { timeout }).then(s => rappel(null, s), rappel); },
-    }, res => {
+    }, reponse => {
       const morceaux = []; let n = 0;
-      res.on('data', d => { n += d.length; if (n > 8 * 1024 * 1024) req.destroy(new Error('réponse trop grande')); else morceaux.push(d); });
-      res.on('end', () => {
+      reponse.on('data', d => { n += d.length; if (n > 8 * 1024 * 1024) req.destroy(new Error('réponse trop grande')); else morceaux.push(d); });
+      reponse.on('end', () => {
         const brut = Buffer.concat(morceaux).toString('utf8');
         let json = null; try { json = brut ? JSON.parse(brut) : null; } catch { /* pas du JSON */ }
-        resolve({ status: res.statusCode, json, brut: brut.slice(0, 2000) });
+        resolve({ status: reponse.statusCode, json, brut: brut.slice(0, 2000) });
       });
     });
     req.on('timeout', () => req.destroy(new Error('délai dépassé')));
