@@ -137,6 +137,15 @@ test('fin de vie : versions et systèmes', () => {
   assert.equal(systemeFinDeVie('Windows 11 Pro'), null);
 });
 
+test('IA : un constat critique n’est jamais écarté, au plus nuancé', async () => {
+  const { IA } = await import('../src/ia.js');
+  const reponse = { message: { content: JSON.stringify({ verdicts: [{ n: 1, statut: 'ecarte', note: 'faux positif' }, { n: 2, statut: 'ecarte', note: 'faux positif' }], synthese: 'ok' }) } };
+  const ia = new IA({ cfg: { iaLocaleUrl: 'http://ollama' }, magasin: { reglage: () => ({ mode: 'locale', modeleLocal: 'm' }), compterIA() {} }, fetch: async () => new Response(JSON.stringify(reponse)) });
+  const constats = [{ cle: 'k1', gravite: 'critique', domaine: 'surface', regle: 'r', ref: 'x', titre: 't', sujet: 's' }, { cle: 'k2', gravite: 'faible', domaine: 'surface', regle: 'r', ref: 'x', titre: 't', sujet: 's' }];
+  const r = await ia.relire({ constats, scores: { score: 50, domaines: {}, distribution: {} } });
+  assert.deepEqual([r.verdicts.k1.statut, r.verdicts.k2.statut], ['nuance', 'ecarte']);
+});
+
 test('IA : la réponse est relue champ par champ, les liens et balises retirés', () => {
   assert.deepEqual(extraireJson('blabla {"a":{"b":"}"}} fin'), { a: { b: '}' } });
   assert.equal(extraireJson('rien'), null);
@@ -346,6 +355,10 @@ test('renfort : ce qui rend VIGIE sourde ou envoie ses alertes ailleurs le deman
     assert.equal((await admin.put('/api/reglages/reaction', { actif: true })).status, 403);
   });
   assert.equal(vigie.magasin.reglage('telegram').chat, '-100123');
+  await sansRenfort(async () => {
+    assert.equal((await admin.post('/api/actions', { type: 'quarantine', appareil: 'sw', forcer: true })).status, 403, 'forcer une isolation');
+  });
+  assert.deepEqual((await lecteur.get('/api/audits/..%2F..%2Fx')).json, { error: 'Introuvable.' }, 'un identifiant hors format n’atteint pas le magasin');
   assert.equal(vigie.magasin.reglage('veille').actif, true);
   assert.equal((await admin.put('/api/reglages/telegram', { seuil: 'eleve' })).status, 200);
 });
@@ -582,4 +595,19 @@ test('ligne de commande : sauvegarde chiffrée pour une clé publique, restauré
   assert.throws(() => cli(['secrets', 'retirer', 'inconnu']), e => /canal inconnu/.test(String(e.stderr)));
   const actions = vigie.db.prepare("SELECT action FROM socle_journal WHERE action IN ('sauvegarde.faite', 'secrets.retires')").all().map(x => x.action);
   assert.deepEqual(actions.sort(), ['sauvegarde.faite', 'secrets.retires']);
+});
+
+test('réaction rapide : jamais hors du périmètre balayé par MapMyLAN', async () => {
+  await admin.put('/api/reglages/reaction', { actif: true, parHeure: 20 });
+  const x = await vigie.moteur.reagir({ id: 'dehors', ip: '203.0.113.9', type: 'iot', status: 'suspect' }, { titre: 'essai' });
+  assert.equal(x, null);
+  const ev = (await admin.get('/api/evenements?type=reaction.retenue')).json;
+  assert.ok(ev.some(e => /hors du périmètre/.test(e.texte)), ev.map(e => e.texte).join(' | '));
+  await admin.put('/api/reglages/reaction', { actif: false });
+});
+
+test('jetons inventés en rafale : chacun compte, l’adresse est bloquée avant d’en deviner un', async () => {
+  const codes = [];
+  for (let i = 0; i < 14; i++) codes.push((await avec(`faux-jeton-${i}-0000000000000000`, 'GET', '/api/etat')).status);
+  assert.ok(codes.includes(429), codes.join(' '));
 });
