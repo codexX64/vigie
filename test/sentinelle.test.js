@@ -77,6 +77,11 @@ test('décodeurs : SSH, sudo, comptes, noyau, NAS, hyperviseur, web, repli', () 
   x = d('<38>Oct 14 10:00:01 s sshd[1]: Failed password for root from ::ffff:203.0.113.7 port 1 ssh2');
   assert.equal(x.champs.srcip, '203.0.113.7');
   for (const dec of DECODEURS) for (const m of dec.motifs) assert.ok(m.regex instanceof RegExp && m.geste, `${dec.nom} : motif complet`);
+  // Wi-Fi : un refus 802.1X est un échec d'authentification, pas une association.
+  x = d('<30>Oct 14 10:00:01 ap hostapd: wlan0: STA aa:bb:cc:dd:ee:ff IEEE 802.1X: authentication failed');
+  assert.deepEqual([x.decodeur, x.geste, x.champs.mac], ['wifi', 'auth.echec', 'aa:bb:cc:dd:ee:ff']);
+  x = d('<30>Oct 14 10:00:01 ap hostapd: wlan1: STA aa:bb:cc:dd:ee:ff IEEE 802.11: associated');
+  assert.deepEqual([x.geste, x.champs.interface, x.champs.quoi], ['wifi.assoc', 'wlan1', 'associated']);
 });
 
 test('décodeurs : une ligne hostile de 16 Kio, quel que soit le programme annoncé, se lit vite', () => {
