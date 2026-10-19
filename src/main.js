@@ -59,6 +59,9 @@ export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = gl
   const bouclier = new Bouclier({ cfg, db, magasin, moteur, sources, journal: socle.journal, fetch: fetchMenaces, log });
   const sentinelle = new SentinelleVigie({ magasin, moteur, bouclier, log });
   bouclier.brancher(sentinelle);
+  // Données d'un compte : exportées à sa demande, son identifiant effacé de VIGIE à sa suppression.
+  magasin.poserOubli();
+  socle.portail.exporteur = compteId => magasin.donneesDe(socle.comptes.compte(compteId)?.identifiant ?? '');
   const api = creerApi({ socle, cfg, magasin, moteur, sources, ia, memoire, diffusion, bouclier, sentinelle });
   moteur.demarrer();
   sentinelle.demarrer();

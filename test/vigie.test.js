@@ -523,6 +523,20 @@ test('manifeste : une seule version partout, port des journaux publié en UDP et
   for (const id of ['shield.state', 'sentinel.state', 'ip.block']) assert.ok(m.actions.some(a => a.id === id), id);
 });
 
+test('données d’un compte : ses gestes exportés, son identifiant effacé de VIGIE à sa suppression', async () => {
+  const { client: chloe, compteId } = await membreInvite(admin, () => new Client(port), { identifiant: 'chloe', role: 'membre' });
+  const a = await chloe.post('/api/audits', { ia: false });
+  assert.equal(a.status, 200, JSON.stringify(a.json));
+  for (let i = 0; i < 200 && vigie.moteur.enCours; i++) await attendre(25);
+  const ex = await chloe.get('/api/compte/export');
+  assert.equal(ex.status, 200, JSON.stringify(ex.json));
+  assert.ok(ex.json.vigie.audits.some(x => x.id === a.json.id), 'l’audit lancé figure dans l’export');
+  const sup = await admin.del(`/api/compte/admin/comptes/${compteId}`);
+  assert.equal(sup.status, 200, JSON.stringify(sup.json));
+  assert.deepEqual(vigie.magasin.donneesDe('chloe').audits, []);
+  assert.equal(vigie.magasin.audit(a.json.id).auteur, 'compte supprimé');
+});
+
 test('rotation de SOCLE_CLE : les secrets de VIGIE sont rescellés, rien n’est perdu', async () => {
   const dossier = path.join(tmp, 'rotation');
   const cle = k => Buffer.alloc(32, k).toString('base64');

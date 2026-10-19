@@ -134,6 +134,31 @@ export class Magasin {
     return bilan;
   }
 
+  // Les gestes d'un compte, nommé par son identifiant dans les audits, les
+  // actions, les acquittements et les blocages : exportés à sa demande.
+  donneesDe(identifiant) {
+    const q = (sql, ...a) => this.db.prepare(sql).all(...a);
+    return {
+      audits: q('SELECT id, debut, declencheur FROM audits WHERE auteur = ? ORDER BY debut', identifiant),
+      actions: q('SELECT id, quand, type, cible_nom, motif, etat, annulee_par, annulee_le FROM actions WHERE auteur = ? OR annulee_par = ? ORDER BY quand', identifiant, identifiant),
+      acquittements: q('SELECT id, quand, titre, acquitte FROM evenements WHERE acquitte_par = ? ORDER BY quand', identifiant),
+      blocages: q('SELECT id, ip, debut, motif, etat, leve_par, leve_le FROM blocages WHERE auteur = ? OR leve_par = ? ORDER BY debut', identifiant, identifiant),
+    };
+  }
+  /**
+   * À la suppression d'un compte, son identifiant disparaît des tables de
+   * VIGIE dans la même transaction que la ligne du compte : un déclencheur de
+   * la base, posé une fois toutes les tables créées.
+   */
+  poserOubli() {
+    const neutre = "'compte supprimé'";
+    const maj = [['audits', 'auteur'], ['actions', 'auteur'], ['actions', 'annulee_par'], ['evenements', 'acquitte_par'], ['blocages', 'auteur'], ['blocages', 'leve_par']]
+      .map(([t, c]) => `UPDATE ${t} SET ${c} = ${neutre} WHERE ${c} = OLD.identifiant;`).join('\n      ');
+    this.db.exec(`DROP TRIGGER IF EXISTS vigie_oubli;
+    CREATE TRIGGER vigie_oubli BEFORE DELETE ON socle_comptes BEGIN
+      ${maj}
+    END;`);
+  }
 
   // ---- réglages ----
   reglage(nom) {
