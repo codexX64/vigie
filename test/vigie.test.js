@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import net from 'node:net';
 import { Client } from '../socle/essai/client.js';
 import { adminComplet, membreInvite } from '../socle/essai/inscription.js';
 import { demarrer } from '../src/main.js';
@@ -586,7 +587,7 @@ test('interface sous /v/<version>/ : une mise à jour change l’adresse de chaq
   assert.equal((await fetch(`${base}/v/${VERSION}/../../package.json`)).status, 404);
 });
 
-test('manifeste : une seule version partout, port des journaux publié en UDP et TCP', () => {
+test('manifeste : une seule version partout, port des journaux publié en UDP et TCP, relais de confiance du réseau du Hub', () => {
   const lire = f => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
   const m = JSON.parse(lire('hub.json'));
   assert.equal(m.version, VERSION);
@@ -599,6 +600,12 @@ test('manifeste : une seule version partout, port des journaux publié en UDP et
   assert.equal(m.config.find(c => c.key === 'SYSLOG_PORT').default, 5514);
   for (const id of ['threat.blocked', 'host.compromised', 'host.alert']) assert.ok(m.triggers.some(t => t.id === id), id);
   for (const id of ['shield.state', 'sentinel.state', 'ip.block']) assert.ok(m.actions.some(a => a.id === id), id);
+  // Derrière Relay (réseau Docker du Hub), le HTTPS n'est reconnu que si le relais est de confiance.
+  const proxys = m.config.find(c => c.key === 'SOCLE_PROXYS').default;
+  assert.ok(proxys, 'relais de confiance vide : VIGIE se croirait en HTTP derrière Relay');
+  const relais = new net.BlockList();
+  for (const p of proxys.split(',')) { const [a, l] = p.trim().split('/'); relais.addSubnet(a, Number(l)); }
+  assert.ok(relais.check('172.18.0.5') && !relais.check('10.0.0.11'), 'le réseau Docker du Hub, pas le réseau local');
 });
 
 test('données d’un compte : ses gestes exportés, son identifiant effacé de VIGIE à sa suppression', async () => {
