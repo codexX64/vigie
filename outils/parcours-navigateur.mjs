@@ -70,6 +70,44 @@ await page.getByRole('button', { name: 'Bloquer une adresse' }).click();
 await dialogue().waitFor();
 await controle('bouclier-bloquer');
 await fermer();
+// Chaque liste du Bouclier a sa page (#bouclier?vue=…), ouverte depuis l'ensemble.
+const vueDetail = async (ouvrir, entete, nom) => {
+  await ouvrir();
+  await page.getByRole('heading', { name: entete, exact: true }).first().waitFor();
+  await page.waitForTimeout(400);
+  await controle(nom);
+};
+const enTete = nom => page.locator('.headrow').getByRole('button', { name: nom, exact: true }).click();
+const toutVoir = titre => page.locator('.card', { has: page.getByRole('heading', { name: titre, exact: true }) }).getByRole('button', { name: 'Tout voir' }).click();
+await vueDetail(() => page.locator('.fig.cliquable', { hasText: 'Menaces suivies' }).click(), 'Menaces extérieures', 'bouclier-menaces');
+await aller('Bouclier');
+await vueDetail(() => page.getByRole('button', { name: /^Blocages en cours/ }).click(), 'Blocages', 'bouclier-blocages');
+await aller('Bouclier');
+await vueDetail(() => toutVoir('Machines du réseau'), 'Machines du réseau', 'bouclier-machines');
+await aller('Bouclier');
+await vueDetail(() => page.getByRole('button', { name: /^Alertes de l’IPS ·/ }).click(), 'Alertes de l’IPS', 'bouclier-alertes');
+await aller('Bouclier');
+await vueDetail(() => enTete('Réglages'), 'Réglages du bouclier', 'bouclier-reglages');
+await aller('Sentinelle');
+await controle('sentinelle');
+await vueDetail(() => toutVoir('En direct'), 'En direct', 'sentinelle-direct');
+await aller('Sentinelle');
+await vueDetail(() => toutVoir('Dernières alertes'), 'Alertes', 'sentinelle-alertes');
+await aller('Sentinelle');
+await vueDetail(() => toutVoir('Hôtes les plus exposés'), 'Hôtes', 'sentinelle-hotes');
+await aller('Sentinelle');
+await vueDetail(async () => {
+  await page.getByRole('button', { name: 'Sources d’attaque et règles' }).click();
+  await page.locator('details.regles-ref > summary').click();
+  await page.locator('.famille').first().waitFor();
+}, 'Sources et règles', 'sentinelle-sources');
+await aller('Sentinelle');
+await vueDetail(async () => {
+  await enTete('Réglages');
+  await page.getByLabel('Ligne de journal').fill('<38>Oct 15 10:00:01 serveur sshd[1234]: Failed password for root from 203.0.113.7 port 51234 ssh2');
+  await page.getByRole('button', { name: 'Analyser' }).click();
+  await page.locator('dl.preuve').waitFor();
+}, 'Réglages de la sentinelle', 'sentinelle-reglages');
 await aller('Événements');
 await controle('evenements');
 await aller('Actions');
