@@ -96,7 +96,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
     if (!e.actif) notes.push(['warn', 'La sentinelle est éteinte : les journaux d’hôtes reçus sont ignorés.']);
     else if (!e.hotes.length) notes.push(['', 'Aucun journal d’hôte reçu. Envoie les journaux de tes machines (rsyslog, journald, NAS, hyperviseur, routeur) au port syslog de VIGIE : carte « Brancher un hôte » plus bas.']);
     if (e.hotes.some(x => x.niveauMax >= 12)) notes.push(['warn', `Signes de compromission sur ${e.hotes.filter(x => x.niveauMax >= 12).map(x => x.hote).join(', ')} : voir les alertes, puis le Bouclier (machines du réseau).`]);
-    avis.replaceChildren(...notes.slice(0, 1).map(([c, t]) => h('div', { class: 'card mb12' }, h('div', { class: 'notice' }, h('span', { class: `itile ${c ? 'g-eleve' : 'g-info'}` }, icone(c ? 'alerte' : 'oeil', 15)), h('div', {}, h('p', { text: t }))))));
+    avis.replaceChildren(...notes.slice(0, 1).map(([c, t]) => h('div', { class: 'card' }, h('div', { class: 'notice' }, h('span', { class: `itile ${c ? 'g-eleve' : 'g-info'}` }, icone(c ? 'alerte' : 'oeil', 15)), h('div', {}, h('p', { text: t }))))));
 
     alertes.replaceChildren(...(e.recentes.length ? e.recentes.slice(0, 40).map(a => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile g-${GRAV(a.niveau)}` }, icone(a.niveau >= 10 ? 'eclair' : 'alerte', 15)),
@@ -163,11 +163,11 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
     corps = [
       tete('Sentinelle', [admin ? h('button', { class: 'btn', type: 'button', onclick: () => ouvrirVue('reglages') }, icone('reglages', 15), 'Réglages') : h('button', { class: 'btn', type: 'button', onclick: () => ouvrirVue('reglages') }, icone('serveur', 15), 'Brancher un hôte')]),
       figs, avis,
-      h('div', { class: 'card mb12' }, h('header', {}, h('h2', { text: 'En direct' }), h('span', { class: 'row' }, temoin, voirPlus('direct'))), direct),
+      h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'En direct' }), h('span', { class: 'row' }, temoin, voirPlus('direct'))), direct),
       h('div', { class: 'split' },
         carte('Dernières alertes', h('span', { class: 'row' }, noteAlertes, voirPlus('alertes')), apercuAlertes),
         carte('Hôtes les plus exposés', h('span', { class: 'row' }, noteHotes, voirPlus('hotes')), apercuHotes)),
-      h('div', { class: 'mt12 actions' }, h('button', { class: 'btn sm', type: 'button', onclick: () => ouvrirVue('sources') }, icone('oeil', 14), 'Sources d’attaque et règles'))];
+      h('div', { class: 'actions' }, h('button', { class: 'btn sm', type: 'button', onclick: () => ouvrirVue('sources') }, icone('oeil', 14), 'Sources d’attaque et règles'))];
   } else if (vue === 'reglages') {
     corps = [tete(TITRES.reglages), admin ? h('div', { class: 'grille' }, carteReglages(), carteEssai(), carteBrancher()) : h('div', { class: 'grille' }, carteBrancher())];
   } else {
@@ -223,7 +223,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
           h('dt', { text: 'Champs' }), h('dd', { text: champs || '—' }),
           h('dt', { text: 'Chaîne' }), h('dd', { text: o.chaine.map(r => `${r.id} (${r.niveau})`).join(' → ') || 'aucune règle' }),
           h('dt', { text: 'Avec répétition' }), h('dd', { text: o.composeesPossibles.map(r => `${r.id} (${r.niveau}${r.frequence ? `, ${r.frequence}× en ${r.fenetre} s` : r.apres ? ', après ' + (r.apres.regle || r.apres.groupe) : r.fts ? ', première fois' : ''})`).join(' · ') || '—' })),
-        o.finale ? h('div', { class: 'row mt9' }, chip(o.finale.niveau), h('span', { text: o.finale.silence ? `${o.finale.description} — silencieuse (comptée, jamais montrée)` : o.finale.description })) : h('p', { class: 'hint', text: 'Aucune règle ne correspond : la ligne est comptée pour l’hôte, rien d’autre.' }));
+        o.finale ? h('div', { class: 'retenue mt9' }, chip(o.finale.niveau), h('span', { text: o.finale.silence ? `${o.finale.description} — silencieuse (comptée, jamais montrée)` : o.finale.description })) : h('p', { class: 'hint', text: 'Aucune règle ne correspond : la ligne est comptée pour l’hôte, rien d’autre.' }));
     });
     essai = h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Essayer une ligne' }), h('span', { class: 'note', text: 'rien n’est retenu' })), h('div', { class: 'cardbody' },
       h('p', { class: 'hint mt0', text: 'Colle une ligne de journal telle que ton hôte l’envoie : la sentinelle montre ce qu’elle en décode et quelle règle elle retient.' }),
@@ -248,7 +248,7 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
   // Référence des règles
   function carteRegles() {
     const corps = h('div', {});
-    const det = h('details', { class: 'card mt12 regles-ref', ontoggle: sur(async () => {
+    const det = h('details', { class: 'card ecart-haut regles-ref', ontoggle: sur(async () => {
       if (!det.open || corps.children.length) return;
       const liste = await api.get('/api/sentinelle/regles');
       const familles = new Map();

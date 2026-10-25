@@ -180,8 +180,8 @@ function courbe(historique) {
 }
 
 function carteSources(sources) {
-  return h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Sources' }), h('span', { class: 'note', text: 'ce que VIGIE lit' })),
-    Object.entries(SOURCES).map(([k, nom]) => {
+  return h('div', { class: 'card carte-pleine' }, h('header', {}, h('h2', { text: 'Sources' }), h('span', { class: 'note', text: 'ce que VIGIE lit' })),
+    h('div', { class: 'corps-plein' }, Object.entries(SOURCES).map(([k, nom]) => {
       const x = sources[k] || {};
       const t = !x.relie ? h('span', { class: 'tag idle' }, h('i', { class: 'd' }), 'non reliée')
         : x.ok === false ? h('span', { class: 'tag held' }, h('i', { class: 'd' }), 'en échec')
@@ -189,7 +189,7 @@ function carteSources(sources) {
       const aide = !x.relie ? { mapmylan: 'Installe MapMyLAN depuis le Hub : il est la source principale.', nexarc: 'Facultatif : postes, antivirus, correctifs.', docker: 'Facultatif : jeton à poser dans les réglages.', tls: 'Coupées dans les réglages de la veille.', synapse: 'Facultatif : mémoire des audits.' }[k]
         : x.erreur || (x.quand ? `lue le ${quand(x.quand)}${x.n !== undefined ? ` · ${pluriel(x.n, 'élément')}` : ''}` : '');
       return h('div', { class: 'etat-source' }, h('span', { class: 'itile' }, icone(k === 'tls' ? 'cadenas' : k === 'docker' ? 'puce' : 'serveur', 15)), h('div', {}, h('strong', { text: nom }), aide ? h('small', { text: aide }) : null), t);
-    }));
+    })));
 }
 
 // Tableau de bord
@@ -219,7 +219,7 @@ async function pageTableau() {
   const prio = e.priorites.map(p => ({ titre: p.titre, texte: `${p.sujet ? p.sujet + ' — ' : ''}${p.correction}`, gravite: p.gravite }));
   const pistes = (a.ia?.priorites || []).map(p => ({ titre: p.titre, texte: p.pourquoi }));
   return h('div', { class: 'page' }, entete,
-    e.evenements.critiques ? h('div', { class: 'card mb18' }, h('div', { class: 'notice' }, h('span', { class: 'itile g-critique' }, icone('eclair', 15)),
+    e.evenements.critiques ? h('div', { class: 'card' }, h('div', { class: 'notice' }, h('span', { class: 'itile g-critique' }, icone('eclair', 15)),
       h('div', {}, h('p', { text: `${pluriel(e.evenements.critiques, 'événement critique', 'événements critiques')} non acquitté${e.evenements.critiques > 1 ? 's' : ''} cette semaine.` })),
       h('button', { class: 'btn sm', type: 'button', onclick: () => aller('evenements') }, 'Voir'))) : null,
     // Deux colonnes qui s'empilent chacune à sa hauteur : pas de vide sous le score.
@@ -243,17 +243,18 @@ async function pageTableau() {
 function carteIA(ia = {}, reglage) {
   const entete = t => h('header', {}, h('h2', { text: 'Relecture de l’IA' }), h('span', { class: 'note', text: t }));
   if (ia.statut === 'faite') {
-    return h('div', { class: 'card' }, entete(`${ia.moteur === 'locale' ? 'locale' : ia.moteur === 'cloud' ? 'en nuage' : 'locale puis nuage'} · ${ia.modele || ''}`),
-      ia.synthese ? h('p', { class: 'synthese', text: ia.synthese }) : null,
-      (ia.scenarios || []).map(x => h('div', { class: 'scenario' }, h('strong', { text: x.titre }), h('p', { text: x.explication }))),
-      ia.erreurs?.length ? h('p', { class: 'hint pad-erreur', text: `Incidents : ${ia.erreurs.join(' ; ')}` }) : null,
+    return h('div', { class: 'card carte-pleine' }, entete(`${ia.moteur === 'locale' ? 'locale' : ia.moteur === 'cloud' ? 'en nuage' : 'locale puis nuage'} · ${ia.modele || ''}`),
+      h('div', { class: 'corps-plein' },
+        ia.synthese ? h('p', { class: 'synthese', text: ia.synthese }) : null,
+        (ia.scenarios || []).map(x => h('div', { class: 'scenario' }, h('strong', { text: x.titre }), h('p', { text: x.explication }))),
+        ia.erreurs?.length ? h('p', { class: 'hint pad-erreur', text: `Incidents : ${ia.erreurs.join(' ; ')}` }) : null),
       h('p', { class: 'hint pad-erreur', text: 'L’IA confirme, nuance ou écarte les constats ; elle ne change ni les gravités ni le score.' }));
   }
   const texte = ia.statut === 'en cours' ? 'L’IA relit l’audit…'
     : ia.statut === 'ignoree' ? `Pas de relecture : ${ia.raison}${ia.erreurs?.length ? ` (${ia.erreurs.join(' ; ')})` : ''}.`
       : reglage.mode === 'aucune' ? 'Aucune IA choisie : l’audit vient du seul moteur de règles, complet sans elle.' + (admin ? ' Réglages → IA pour en brancher une, locale ou en nuage.' : '')
         : 'Cet audit n’a pas été relu.';
-  return h('div', { class: 'card' }, entete(ia.statut === 'en cours' ? 'en cours' : reglage.mode), h('p', { class: 'synthese', text: texte }));
+  return h('div', { class: 'card carte-pleine' }, entete(ia.statut === 'en cours' ? 'en cours' : reglage.mode), h('div', { class: 'corps-plein' }, h('p', { class: 'synthese', text: texte })));
 }
 
 // Constats
@@ -285,7 +286,7 @@ async function pageConstats(q) {
       const pire = cs.reduce((x, c) => (rang(c) < rang(x) ? c : x), cs[0]).gravite;
       const ecarts = cs.filter(c => c.gravite !== 'safe').length;
       return h('details', { class: 'hote' }, h('summary', {}, h('span', { class: `itile g-${pire}` }, icone(ICONE_G[pire], 15)),
-        h('div', { class: 'tronque' }, h('strong', { text: nom }), h('small', { text: `${pluriel(cs.length, 'constat')} · ${ecarts ? pluriel(ecarts, 'écart') : 'aucun écart'}` })), chipG(pire)), cs.map(ligneConstat));
+        h('div', { class: 'grow1' }, h('strong', { text: nom }), h('small', { text: `${pluriel(cs.length, 'constat')} · ${ecarts ? pluriel(ecarts, 'écart') : 'aucun écart'}` })), chipG(pire)), cs.map(ligneConstat));
     }));
   }
   const ligneConstat = c => h('div', { class: `flowrow cliquable ${c.ia?.statut === 'ecarte' ? 'ecarte' : ''}`, role: 'button', tabindex: '0', 'data-donnee': '', onclick: () => ficheConstat(c), onkeydown: ev => { if (ev.key === 'Enter') ficheConstat(c); } },

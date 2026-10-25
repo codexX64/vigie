@@ -105,7 +105,7 @@ export async function pageBouclier({ api, admin, sur, quand, interrupteur, suivr
     if (e.mode !== 'actif') notes.push(['', e.mode === 'observer' ? 'Mode observation : VIGIE signale, ne bloque rien.' : 'Mode simulation : VIGIE note ce qu’il aurait bloqué, rien ne part vers la passerelle.']);
     if (e.tempete && maintenant - e.tempete.quand < 10 * 60e3) notes.unshift(['warn', `Tempête en cours sur le port ${e.tempete.port} : ${e.tempete.sources} adresses, ${e.tempete.parMinute} paquets en une minute. Les plus bruyantes sont bloquées${e.cloudflare?.attaque ? ', Cloudflare est en mode Under Attack' : ''} ; au-delà, c’est Cloudflare ou le fournisseur d’accès.`]);
     else if (e.cloudflare?.attaque) notes.unshift(['warn', `Cloudflare en mode Under Attack (${e.cloudflare.attaque.motif}) jusqu’à ${quand(e.cloudflare.attaque.jusqua)}.`]);
-    avis.replaceChildren(...notes.slice(0, 1).map(([c, t]) => h('div', { class: 'card mb12' }, h('div', { class: 'notice' }, h('span', { class: `itile ${c ? 'g-eleve' : 'g-info'}` }, icone(c ? 'alerte' : 'oeil', 15)), h('div', {}, h('p', { text: t }))))));
+    avis.replaceChildren(...notes.slice(0, 1).map(([c, t]) => h('div', { class: 'card' }, h('div', { class: 'notice' }, h('span', { class: `itile ${c ? 'g-eleve' : 'g-info'}` }, icone(c ? 'alerte' : 'oeil', 15)), h('div', {}, h('p', { text: t }))))));
 
     const ligneMenace = m => h('div', { class: 'flowrow', 'data-donnee': '' },
       h('span', { class: `itile ${m.score >= m.seuil ? 'g-critique' : m.score >= m.seuil / 2 ? 'g-eleve' : 'g-faible'}` }, icone('oeil', 15)),
