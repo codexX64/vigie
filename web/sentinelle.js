@@ -69,6 +69,9 @@ export async function pageSentinelle({ api, admin, sur, quand, interrupteur, sui
     source.addEventListener('bouclier', sur_);
     source.onopen = () => { fluxOk = true; temoin.className = 'tag held'; temoin.lastChild.textContent = 'en direct'; };
     source.onerror = () => { fluxOk = false; temoin.className = 'tag warn'; temoin.lastChild.textContent = 'reconnexion…'; };
+    // Page quittée, flux fermé : sinon chaque visite garde sa connexion et le
+    // navigateur, à six par hôte, finit par ne plus rien charger.
+    const garde = setInterval(() => { if (!page.isConnected) { source.close(); clearInterval(garde); } }, 1000);
   };
   const temoin = h('span', { class: 'tag idle' }, h('i', { class: 'd' }), 'connexion…');
   const selNiveau = h('select', { class: 'field sm', 'aria-label': 'Niveau minimum du direct', onchange: () => { niveauMin = Number(selNiveau.value); filtrer(); } },
