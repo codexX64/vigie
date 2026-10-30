@@ -1,3 +1,12 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="medias/logo-sombre.svg">
+    <img src="medias/logo-clair.svg" alt="VIGIE" height="56">
+  </picture>
+</p>
+
+<p align="center"><img src="medias/affiche.png" alt="Affiche de VIGIE" width="100%"></p>
+
 # VIGIE
 
 Audit et veille de sécurité du réseau, sous le Hub. VIGIE lit ce que les
@@ -49,6 +58,22 @@ ni le score.
   format ticket/v1 (Aselia), Telegram, et SYNAPSE pour la mémoire des audits.
 - **Page Vigie dans MapMyLAN** (2.1 et plus) : score, priorités, événements,
   et les constats de chaque appareil dans sa fiche.
+
+## Aperçu
+
+| <img src="medias/capture-1.png" alt="Le tableau : score par domaine"> |
+|:--:|
+| Le tableau : score par domaine |
+
+| <img src="medias/capture-2.png" alt="Les constats et leur correction"> |
+|:--:|
+| Les constats et leur correction |
+
+| <img src="medias/capture-3.png" alt="Le bouclier de la passerelle"> |
+|:--:|
+| Le bouclier de la passerelle |
+
+Quatre gammes d’interface au choix — SOMA, Console, Exploitation, Lavande — en clair ou en sombre, de 360 à 1920 px de large.
 
 ## Installation
 
@@ -103,6 +128,33 @@ node src/cli.js restaurer vigie-sauvegarde.pem vigie.db < vigie-AAAA-MM-JJ.sauv
 clé d'IA, les jetons Telegram, docker-control, UniFi, Cloudflare et de la liste
 des pare-feu, et la clé de la billetterie (ou ceux d'un seul canal) ; les
 révoquer aussi chez leur fournisseur. Voir SECURITY.md, « Incident runbook ».
+
+## Première configuration et mises à jour
+
+Au premier démarrage, ouvre l’interface : tu crées le compte administrateur avec
+le jeton d’installation (affiché dans les journaux du conteneur, ou transmis par
+le Hub), tu inscris tes facteurs de connexion, puis l’**assistant de
+configuration** passe les réglages de VIGIE groupe par groupe. Il est
+obligatoire : VIGIE reste fermé tant qu’il n’est pas terminé. Chaque valeur
+proposée convient pour commencer.
+
+<p align="center"><img src="medias/assistant.png" alt="Assistant de configuration" width="70%"></p>
+
+Réglages demandés : adresse de MapMyLAN, jeton de MapMyLAN pour VIGIE, adresse de NEXARC, jeton de NEXARC pour VIGIE, port syslog publié sur la machine, iA des audits, adresse d’Ollama, modèle local, fournisseur en nuage, modèle en nuage, clé d’API du fournisseur, appels par jour au plus ; plus ceux de
+tous les services (adresse publique, relais de confiance, gamme de
+l’interface, contact de sécurité, courriels d’alerte).
+
+Après une mise à jour qui apporte un réglage nouveau, l’assistant revient au
+passage suivant d’un administrateur et ne demande **que ce réglage-là**. Une
+mise à jour sans réglage nouveau ne demande rien : une fenêtre « Quoi de neuf »
+résume ce qu’elle apporte, une fois par compte, et se ferme d’un clic
+(`nouveautes.json`).
+
+Tout reste modifiable dans **Comptes → Réglages du service**. Une variable
+posée dans l’environnement l’emporte toujours et n’est pas demandée. VIGIE
+redémarre seul pour appliquer un changement (le processus du conteneur le
+supervise). Les valeurs vivent dans `reglages.json`, dans le volume de
+données ; les secrets y sont scellés par la clé maîtresse.
 
 ## Bouclier
 
