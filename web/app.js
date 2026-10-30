@@ -11,24 +11,39 @@ import {
 import { pageBouclier } from './bouclier.js';
 import { pageSentinelle } from './sentinelle.js';
 
-// Le logo de VIGIE, dans la couleur du texte : la marque de la barre et de
-// l'écran de connexion (même tracé que l'icône de l'onglet).
+// Les logos de VIGIE, dans la couleur du texte (mêmes tracés que le dossier
+// Logo) : la marque seule pour les tuiles et l'écran de connexion, le logo
+// complet avec le nom pour la barre.
 const LOGO_NS = 'http://www.w3.org/2000/svg';
-function logo(taille = 16) {
+function dessinLogo(vb, traces, largeur, hauteur, nom) {
   const s = document.createElementNS(LOGO_NS, 'svg');
-  s.setAttribute('width', taille); s.setAttribute('height', taille);
-  s.setAttribute('viewBox', '6.4 4 244 244'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('class', 'logo');
-  const p = document.createElementNS(LOGO_NS, 'path');
-  p.setAttribute('d', 'M118,228L235.8,24L151.6,72.7L90,179.5ZM21,60L114,113.7L83,167.4Z');
-  p.setAttribute('fill', 'currentColor');
-  s.append(p);
+  s.setAttribute('width', largeur); s.setAttribute('height', hauteur); s.setAttribute('viewBox', vb);
+  if (nom) { s.setAttribute('role', 'img'); s.setAttribute('aria-label', nom); } else s.setAttribute('aria-hidden', 'true');
+  for (const [d, regle] of traces) {
+    const p = document.createElementNS(LOGO_NS, 'path');
+    p.setAttribute('d', d); p.setAttribute('fill', 'currentColor');
+    if (regle) p.setAttribute('fill-rule', regle);
+    s.append(p);
+  }
+  return s;
+}
+const LOGO_MARQUE = ['6.4 4 244 244', [['M118,228L235.8,24L151.6,72.7L90,179.5ZM21,60L114,113.7L83,167.4Z']]];
+const LOGO_TEXTE = ['9 12 704.14 228', [['M118,228L235.8,24L151.6,72.7L90,179.5ZM21,60L114,113.7L83,167.4ZM360.74,80L380.98,80L388.84,144.4L428.82,80L449.06,80L391.16,172L372.76,172ZM458.26,80L476.66,80L453.72,172L435.32,172ZM564.12,172L472.12,172L495.06,80L587.06,80L582.47,98.4L508.87,98.4L495.11,153.6L550.31,153.6L554.9,135.2L527.3,135.2L531.42,118.64L577.42,118.64ZM601.78,80L620.18,80L597.24,172L578.84,172ZM634.9,80L701.14,80L696.55,98.4L648.71,98.4L644.12,116.8L684.6,116.8L680.02,135.2L639.54,135.2L634.95,153.6L682.79,153.6L678.2,172L611.96,172Z']]];
+function logoMarque(taille = 16) {
+  const s = dessinLogo(LOGO_MARQUE[0], LOGO_MARQUE[1], taille, taille, '');
+  s.setAttribute('class', 'logo-marque');
+  return s;
+}
+function logoTexte(hauteur = 20) {
+  const s = dessinLogo(LOGO_TEXTE[0], LOGO_TEXTE[1], Math.round(hauteur * 3.0883), hauteur, 'VIGIE');
+  s.setAttribute('class', 'logo-texte');
   return s;
 }
 
 appliquerTheme();
 const SERVICE = 'VIGIE';
 const api = new Api({ surDeconnexion: () => location.reload() });
-const etatPorte = await porte({ api, service: SERVICE, marque: logo(20), sousTitre: 'audit et veille du réseau' });
+const etatPorte = await porte({ api, service: SERVICE, marque: logoMarque(20), sousTitre: 'audit et veille du réseau' });
 const moi = etatPorte.session.compte;
 const admin = moi.role === 'admin';
 const membre = admin || moi.role === 'membre';
@@ -84,7 +99,7 @@ const railScore = h('b', { text: '—' });
 const railBar = h('i');
 const app = h('div', { class: 'app' },
   h('nav', { class: 'rail', 'aria-label': 'Navigation' },
-    h('div', { class: 'mark' }, h('div', { class: 'g' }, logo(16)), h('b', { text: SERVICE }), h('i', { class: 'pulse' })),
+    h('div', { class: 'mark' }, logoTexte(24), h('i', { class: 'pulse' })),
     groupe('Audit', ['tableau', 'constats', 'historique']),
     groupe('Veille', ['bouclier', 'sentinelle', 'evenements', 'actions']),
     groupe('Système', ['reglages', 'securite', 'comptes']),
