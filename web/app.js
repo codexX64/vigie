@@ -11,10 +11,24 @@ import {
 import { pageBouclier } from './bouclier.js';
 import { pageSentinelle } from './sentinelle.js';
 
+// Le logo de VIGIE, dans la couleur du texte : la marque de la barre et de
+// l'écran de connexion (même tracé que l'icône de l'onglet).
+const LOGO_NS = 'http://www.w3.org/2000/svg';
+function logo(taille = 16) {
+  const s = document.createElementNS(LOGO_NS, 'svg');
+  s.setAttribute('width', taille); s.setAttribute('height', taille);
+  s.setAttribute('viewBox', '6.4 4 244 244'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('class', 'logo');
+  const p = document.createElementNS(LOGO_NS, 'path');
+  p.setAttribute('d', 'M118,228L235.8,24L151.6,72.7L90,179.5ZM21,60L114,113.7L83,167.4Z');
+  p.setAttribute('fill', 'currentColor');
+  s.append(p);
+  return s;
+}
+
 appliquerTheme();
 const SERVICE = 'VIGIE';
 const api = new Api({ surDeconnexion: () => location.reload() });
-const etatPorte = await porte({ api, service: SERVICE, sousTitre: 'audit et veille du réseau' });
+const etatPorte = await porte({ api, service: SERVICE, marque: logo(20), sousTitre: 'audit et veille du réseau' });
 const moi = etatPorte.session.compte;
 const admin = moi.role === 'admin';
 const membre = admin || moi.role === 'membre';
@@ -70,7 +84,7 @@ const railScore = h('b', { text: '—' });
 const railBar = h('i');
 const app = h('div', { class: 'app' },
   h('nav', { class: 'rail', 'aria-label': 'Navigation' },
-    h('div', { class: 'mark' }, h('div', { class: 'g' }, icone('bouclier', 15)), h('b', { text: SERVICE }), h('i', { class: 'pulse' })),
+    h('div', { class: 'mark' }, h('div', { class: 'g' }, logo(16)), h('b', { text: SERVICE }), h('i', { class: 'pulse' })),
     groupe('Audit', ['tableau', 'constats', 'historique']),
     groupe('Veille', ['bouclier', 'sentinelle', 'evenements', 'actions']),
     groupe('Système', ['reglages', 'securite', 'comptes']),
