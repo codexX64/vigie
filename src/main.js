@@ -4,7 +4,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { lireConfigVigie, VERSION } from './config.js';
+import { lireConfigVigie, VERSION, SPEC_VIGIE, REGLAGES_VIGIE } from './config.js';
 import { ouvrirBase, Magasin } from './base.js';
 import { Sources } from './sources.js';
 import { IA } from './ia.js';
@@ -15,7 +15,7 @@ import { creerApi } from './api.js';
 import { Bouclier } from './bouclier/index.js';
 import { SentinelleVigie } from './sentinelle/index.js';
 import {
-  Debit, ErreurHttp, demarrerSocle, entetesSecurite, envelopper, nonceCsp, politiqueContenu,
+  Debit, ErreurHttp, appliquerReglages, demarrerSocle, lireNouveautes, superviser, entetesSecurite, envelopper, nonceCsp, politiqueContenu,
   repondreErreur, repondreJson, servirFichier, cheminVersionne,
 } from '../socle/src/index.js';
 
@@ -37,10 +37,16 @@ function appliquerIaDuHub(cfg, magasin, log) {
   log.info?.(`[ia] réglage du Hub appliqué : ${cfg.iaMode}`);
 }
 
-export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = globalThis.fetch, fetchMenaces = f, sonde } = {}) {
+export async function demarrer(envBrut = process.env, { log = CONSOLE, fetch: f = globalThis.fetch, fetchMenaces = f, sonde } = {}) {
+  // Les réglages posés par l'assistant complètent l'environnement (qui garde la main).
+  const env = appliquerReglages({ dossier: envBrut.DATA_DIR || SPEC_VIGIE.donnees.defaut, env: envBrut });
   const cfg = lireConfigVigie(env);
   const db = ouvrirBase(cfg.donnees);
-  const socle = await demarrerSocle({ service: { id: 'vigie', nom: 'VIGIE', contactSecurite: CONTACT_SECURITE }, db, dossier: cfg.donnees, env, log });
+  const socle = await demarrerSocle({
+    service: { id: 'vigie', nom: 'VIGIE', contactSecurite: CONTACT_SECURITE }, db, dossier: cfg.donnees, env, log,
+    assistant: { reglages: REGLAGES_VIGIE, spec: SPEC_VIGIE, version: VERSION, controler: lireConfigVigie },
+    version: VERSION, nouveautes: lireNouveautes(new URL('../nouveautes.json', import.meta.url)),
+  });
   const magasin = new Magasin(db, { coffre: socle.coffre });
   let bilan;
   try { bilan = magasin.resceller(); } catch (e) { socle.arreter(); db.close(); throw e; }
@@ -106,7 +112,9 @@ export async function demarrer(env = process.env, { log = CONSOLE, fetch: f = gl
   };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
+// Le processus du conteneur supervise le service et le relance quand
+// l'assistant a posé de nouveaux réglages.
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename) && !superviser()) {
   process.umask(0o077);
   const r = await demarrer().catch(e => { console.error(e.message); process.exit(1); });
   const fin = async sig => { console.log(`${sig} reçu, arrêt propre`); await r.arreter(); process.exit(0); };
